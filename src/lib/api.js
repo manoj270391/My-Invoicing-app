@@ -266,3 +266,30 @@ export async function upsertUserRole(userId, email, role) {
   const { error } = await supabase.from('user_roles').upsert({ user_id: userId, email, role })
   if (error) throw error
 }
+
+// ── Void invoice (admin only) ─────────────────────────────────
+// Deletes the invoice and resets all linked entries back to pending
+export async function voidInvoice(invoiceId) {
+  // Reset all linked entries to pending first
+  const { error: resetErr } = await supabase
+    .from('entries')
+    .update({ status: 'pending', invoice_id: null })
+    .eq('invoice_id', invoiceId)
+  if (resetErr) throw resetErr
+
+  // Delete the invoice
+  const { error: delErr } = await supabase
+    .from('invoices')
+    .delete()
+    .eq('id', invoiceId)
+  if (delErr) throw delErr
+
+  await auditLog('DELETE', 'invoices', invoiceId, { voided: true }, null)
+}
+
+// ── Force delete entry regardless of status (admin only) ──────
+export async function forceDeleteEntry(id) {
+  const { error } = await supabase.from('entries').delete().eq('id', id)
+  if (error) throw error
+  await auditLog('DELETE', 'entries', id, { force: true }, null)
+}

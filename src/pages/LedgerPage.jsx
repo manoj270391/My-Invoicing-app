@@ -5,7 +5,7 @@ import {
   IconPlus, IconLedger, IconTrash, IconEdit,
   IconFile, IconGlobe, IconInvoice, IconSearch,
 } from '../components/Icons'
-import { getClients, getEntries, createEntry, updateEntry, deleteEntry } from '../lib/api'
+import { getClients, getEntries, createEntry, updateEntry, deleteEntry, forceDeleteEntry } from '../lib/api'
 import { formatCurrency, formatINR, lineTotal, CURRENCIES } from '../lib/gst'
 import GenerateInvoiceModal from '../components/GenerateInvoiceModal'
 
@@ -27,6 +27,7 @@ export default function LedgerPage() {
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [invoiceModal, setInvoiceModal] = useState(null)
+  const [forceDeleteTarget, setForceDeleteTarget] = useState(null)
   const [selected, setSelected] = useState(new Set())
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({ clientId: '', status: '', month: '', year: '' })
@@ -130,6 +131,16 @@ export default function LedgerPage() {
   async function confirmAndDelete() {
     try { await deleteEntry(confirmDelete.id); toast('Entry removed', 'success'); setConfirmDelete(null); load() }
     catch (e) { toast(e.message, 'error') }
+  }
+
+
+  async function handleForceDelete() {
+    try {
+      await forceDeleteEntry(forceDeleteTarget.id)
+      toast('Entry permanently removed', 'success')
+      setForceDeleteTarget(null)
+      load()
+    } catch (e) { toast(e.message, 'error') }
   }
 
   function toggleSelect(id) {
@@ -260,6 +271,9 @@ export default function LedgerPage() {
                         <button className="btn btn-ghost btn-sm" onClick={() => openEdit(e)}><IconEdit width={14} /></button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(e)}><IconTrash width={14} /></button>
                       </>}
+                      {(e.status === 'invoiced' || e.status === 'paid') && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setForceDeleteTarget(e)} title="Force delete" style={{ color: 'var(--red)', opacity: 0.7 }}><IconTrash width={14} /></button>
+                      )}
                     </td>
                   </tr>
                 )
@@ -373,6 +387,25 @@ export default function LedgerPage() {
         </Modal>
       )}
 
+
+      {/* Force delete invoiced/paid entry */}
+      {forceDeleteTarget && (
+        <Modal title="Force delete entry?" onClose={() => setForceDeleteTarget(null)} width={440}>
+          <div style={{ background: 'var(--red-soft)', border: '1px solid var(--red)', borderRadius: 8, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <IconTrash width={18} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13.5, color: 'var(--red)', lineHeight: 1.6 }}>
+              <strong>This entry is {forceDeleteTarget?.status}.</strong> Deleting it will not automatically update or void the linked invoice. If you need to remove the invoice too, void it separately from the Invoices page.
+            </div>
+          </div>
+          <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6, margin: '0 0 4px' }}>
+            Entry: <strong>{forceDeleteTarget?.file_name || forceDeleteTarget?.service_items?.[0]?.description || 'this entry'}</strong>. This cannot be undone.
+          </p>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={() => setForceDeleteTarget(null)}>Cancel</button>
+            <button className="btn btn-danger" onClick={handleForceDelete}>Force delete</button>
+          </div>
+        </Modal>
+      )}
       {invoiceModal && (
         <GenerateInvoiceModal
           client={invoiceModal}

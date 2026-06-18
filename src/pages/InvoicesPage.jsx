@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
-import { IconInvoice, IconDownload, IconCheck, IconEdit } from '../components/Icons'
-import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile } from '../lib/api'
+import { IconInvoice, IconDownload, IconCheck, IconEdit, IconTrash, IconAlert } from '../components/Icons'
+import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { formatCurrency, formatINR } from '../lib/gst'
 
@@ -15,6 +15,7 @@ export default function InvoicesPage({ isAdmin }) {
   const [editingInv, setEditingInv] = useState(null)
   const [markingPaid, setMarkingPaid] = useState(null)
   const [inrAmount, setInrAmount] = useState('')
+  const [voidConfirm, setVoidConfirm] = useState(null)
   const toast = useToast()
 
   async function load() {
@@ -66,6 +67,16 @@ export default function InvoicesPage({ isAdmin }) {
       const pdf = await generateInvoicePDF({ invoice, client, company, entries })
       pdf.save(`${invoice.invoice_number}.pdf`)
     } catch { toast('Could not regenerate PDF', 'error') }
+  }
+
+
+  async function handleVoid() {
+    try {
+      await voidInvoice(voidConfirm.id)
+      toast(`Invoice ${voidConfirm.invoice_number} voided — entries reset to pending`, 'success')
+      setVoidConfirm(null)
+      load()
+    } catch (e) { toast(e.message, 'error') }
   }
 
   async function saveInvoiceNumber() {
@@ -157,6 +168,7 @@ export default function InvoicesPage({ isAdmin }) {
                   </td>
                   <td style={{ padding: '13px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => redownload(inv)} title="Download PDF"><IconDownload width={14} /></button>
+                    {isAdmin && <button className="btn btn-ghost btn-sm" onClick={() => setVoidConfirm(inv)} title="Void invoice" style={{ color: 'var(--red)' }}><IconTrash width={14} /></button>}
                     {(isAdmin || inv.clients?.client_type === 'website') && (
                       <button className={`btn btn-sm ${inv.status === 'paid' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => handleMarkPaid(inv)}>
                         <IconCheck width={13} /> {inv.status === 'paid' ? 'Unpaid' : 'Mark paid'}
@@ -197,6 +209,25 @@ export default function InvoicesPage({ isAdmin }) {
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setMarkingPaid(null)}>Cancel</button>
             <button className="btn btn-primary" onClick={confirmMarkPaid}>Mark as paid</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Void invoice confirmation */}
+      {voidConfirm && (
+        <Modal title="Void invoice?" onClose={() => setVoidConfirm(null)} width={440}>
+          <div style={{ background: 'var(--red-soft)', border: '1px solid var(--red)', borderRadius: 8, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <IconAlert width={18} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13.5, color: 'var(--red)', lineHeight: 1.6 }}>
+              <strong>This will permanently delete invoice {voidConfirm?.invoice_number}.</strong> All ledger entries linked to it will be reset to <em>pending</em> so you can re-invoice them if needed.
+            </div>
+          </div>
+          <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6, margin: '0 0 4px' }}>
+            This action is recorded in the audit log and cannot be undone.
+          </p>
+          <div className="form-actions">
+            <button className="btn btn-secondary" onClick={() => setVoidConfirm(null)}>Cancel</button>
+            <button className="btn btn-danger" onClick={handleVoid}>Void invoice</button>
           </div>
         </Modal>
       )}
