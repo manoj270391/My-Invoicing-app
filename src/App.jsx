@@ -8,7 +8,7 @@ import { signOut } from './lib/auth'
 import {
   IconDashboard, IconLedger, IconClients, IconInvoice,
   IconRepeat, IconExport, IconFolder, IconSettings,
-  IconUsers, IconHistory, IconLogout, IconBell,
+  IconUsers, IconHistory, IconLogout, IconBell, IconLock,
 } from './components/Icons'
 import SetupNotice from './components/SetupNotice'
 import LoginPage from './pages/LoginPage'
