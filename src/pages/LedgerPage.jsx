@@ -110,16 +110,40 @@ export default function LedgerPage({ isAdmin = true }) {
       const payload = { ...editing }
       delete payload.clients
 
+      // Sanitise — convert any empty string to null for numeric columns
+      const numericFields = ['pages','rate_per_page','website_renewal_price','google_subscription_price','other_price','line_total']
+      numericFields.forEach(k => {
+        if (payload[k] === '' || payload[k] === undefined) payload[k] = null
+        else if (payload[k] !== null) payload[k] = Number(payload[k]) || 0
+      })
+
+      // Sanitise text fields — empty string is fine, undefined should be null
+      const textFields = ['file_name','project_name','website_renewal_desc','google_subscription_desc','other_desc']
+      textFields.forEach(k => {
+        if (payload[k] === undefined) payload[k] = null
+      })
+
       if (payload.entry_type === 'pdf') {
         if (!payload.file_name?.trim()) return toast('File name is required', 'error')
         payload.pages = Number(payload.pages) || 0
         payload.rate_per_page = Number(payload.rate_per_page) || 0
         payload.line_total = payload.pages * payload.rate_per_page
         payload.service_items = []
+        // Null out website-specific fields
+        payload.website_renewal_desc = null
+        payload.website_renewal_price = null
+        payload.google_subscription_desc = null
+        payload.google_subscription_price = null
+        payload.other_desc = null
+        payload.other_price = null
       } else {
         payload.service_items = (payload.service_items || []).filter(i => i.description?.trim())
           .map(i => ({ description: i.description, price: Number(i.price) || 0 }))
         payload.line_total = payload.service_items.reduce((s, i) => s + i.price, 0)
+        // Null out pdf-specific fields
+        payload.file_name = null
+        payload.pages = null
+        payload.rate_per_page = null
       }
 
       if (editing.id) { await updateEntry(editing.id, payload); toast('Entry updated', 'success') }
