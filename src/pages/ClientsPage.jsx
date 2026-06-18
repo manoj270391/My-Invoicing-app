@@ -20,7 +20,7 @@ const EMPTY = {
 
 const DOC_TYPES = ['Contract', 'Purchase Order', 'NDA', 'SOW', 'Remittance', 'Other']
 
-export default function ClientsPage() {
+export default function ClientsPage({ isAdmin = true }) {
   const [clients, setClients] = useState(null)
   const [editing, setEditing] = useState(null)
   const [docsClient, setDocsClient] = useState(null)
@@ -31,7 +31,10 @@ export default function ClientsPage() {
   const toast = useToast()
 
   async function load() {
-    try { setClients(await getClients()) } catch (e) { toast(e.message, 'error') }
+    try {
+      const all = await getClients()
+      setClients(isAdmin ? all : all.filter(c => c.client_type === 'website'))
+    } catch (e) { toast(e.message, 'error') }
   }
   useEffect(() => { load() }, [])
 
@@ -39,7 +42,7 @@ export default function ClientsPage() {
     try { setDocs(await getClientDocuments(clientId)) } catch (e) { toast(e.message, 'error') }
   }
 
-  function openNew() { setEditing({ ...EMPTY }); setTab('details') }
+  function openNew() { setEditing({ ...EMPTY, client_type: isAdmin ? 'pdf' : 'website' }); setTab('details') }
   function openEdit(c) { setEditing({ ...c }); setTab('details') }
   function openDocs(c) { setDocsClient(c); loadDocs(c.id) }
 
@@ -146,14 +149,21 @@ export default function ClientsPage() {
       {/* Add/Edit Modal */}
       {editing && (
         <Modal title={editing.id ? 'Edit client' : 'Add client'} onClose={() => setEditing(null)} width={560}>
-          <div className="radio-tabs">
-            <button className={`radio-tab ${editing.client_type === 'pdf' ? 'selected' : ''}`} onClick={() => setEditing({ ...editing, client_type: 'pdf' })}>
-              <IconFile /> PDF Accessibility
-            </button>
-            <button className={`radio-tab ${editing.client_type === 'website' ? 'selected' : ''}`} onClick={() => setEditing({ ...editing, client_type: 'website' })}>
-              <IconGlobe /> Website & Domain
-            </button>
-          </div>
+          {isAdmin ? (
+            <div className="radio-tabs">
+              <button className={`radio-tab ${editing.client_type === 'pdf' ? 'selected' : ''}`} onClick={() => setEditing({ ...editing, client_type: 'pdf' })}>
+                <IconFile /> PDF Accessibility
+              </button>
+              <button className={`radio-tab ${editing.client_type === 'website' ? 'selected' : ''}`} onClick={() => setEditing({ ...editing, client_type: 'website' })}>
+                <IconGlobe /> Website & Domain
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, padding: '8px 18px', background: 'var(--teal)', borderRadius: 10, width: 'fit-content' }}>
+              <IconGlobe width={15} height={15} style={{ color: 'white' }} />
+              <span style={{ fontWeight: 600, fontSize: 13.5, color: 'white' }}>Website &amp; Domain</span>
+            </div>
+          )}
 
           <div className="field-row">
             <div className="field" style={{ gridColumn: '1/-1' }}>

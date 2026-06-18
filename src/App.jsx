@@ -92,7 +92,7 @@ function AppShell({ dueSoon }) {
       <main className="main">
         {page === 'dashboard' && isAdmin && <DashboardPage />}
         {page === 'ledger'    && <LedgerPage isAdmin={isAdmin} />}
-        {page === 'clients'   && <ClientsPage />}
+        {page === 'clients'   && <ClientsPage isAdmin={isAdmin} />}
         {page === 'invoices'  && <InvoicesPage isAdmin={isAdmin} />}
         {page === 'recurring' && <RecurringPage />}
         {page === 'export'    && isAdmin && <ExportPage />}

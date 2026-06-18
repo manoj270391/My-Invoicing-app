@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast'
 import { IconInvoice, IconDownload, IconCheck, IconEdit, IconTrash, IconAlert } from '../components/Icons'
 import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
+import { openPrintInvoice } from '../lib/printInvoice'
 import { formatCurrency, formatINR } from '../lib/gst'
 
 export default function InvoicesPage({ isAdmin }) {
@@ -21,7 +22,8 @@ export default function InvoicesPage({ isAdmin }) {
   async function load() {
     try {
       const [inv, entries] = await Promise.all([getInvoices(), getEntries()])
-      setInvoices(inv); setAllEntries(entries)
+      setInvoices(isAdmin ? inv : inv.filter(i => i.clients?.client_type === 'website'))
+      setAllEntries(entries)
     } catch (e) { toast(e.message, 'error') }
   }
   useEffect(() => { load() }, [])
@@ -77,6 +79,15 @@ export default function InvoicesPage({ isAdmin }) {
       setVoidConfirm(null)
       load()
     } catch (e) { toast(e.message, 'error') }
+  }
+
+
+  async function reprint(invoice) {
+    try {
+      const company = await getCompanyProfile()
+      const entries = allEntries.filter(e => e.invoice_id === invoice.id)
+      openPrintInvoice({ invoice, client: invoice.clients, company, entries })
+    } catch { toast('Could not open print view', 'error') }
   }
 
   async function saveInvoiceNumber() {
@@ -168,6 +179,7 @@ export default function InvoicesPage({ isAdmin }) {
                   </td>
                   <td style={{ padding: '13px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => redownload(inv)} title="Download PDF"><IconDownload width={14} /></button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => reprint(inv)} title="Print view (Hebrew/multilingual)" style={{ fontSize: 13 }}>🖨️</button>
                     {isAdmin && <button className="btn btn-ghost btn-sm" onClick={() => setVoidConfirm(inv)} title="Void invoice" style={{ color: 'var(--red)' }}><IconTrash width={14} /></button>}
                     {(isAdmin || inv.clients?.client_type === 'website') && (
                       <button className={`btn btn-sm ${inv.status === 'paid' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => handleMarkPaid(inv)}>
