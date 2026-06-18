@@ -20,10 +20,10 @@ function emptyEntry(type) {
   }
 }
 
-export default function LedgerPage() {
+export default function LedgerPage({ isAdmin = true }) {
   const [entries, setEntries] = useState(null)
   const [clients, setClients] = useState([])
-  const [activeTab, setActiveTab] = useState('pdf')
+  const [activeTab, setActiveTab] = useState(isAdmin ? 'pdf' : 'website')
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [invoiceModal, setInvoiceModal] = useState(null)
@@ -170,18 +170,25 @@ export default function LedgerPage() {
         <button className="btn btn-primary" onClick={openNew}><IconPlus /> Add entry</button>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, background: 'var(--paper-raised)', border: '1px solid var(--line)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
-        {[['pdf', 'PDF Accessibility', IconFile], ['website', 'Website & Domain', IconGlobe]].map(([id, label, Icon]) => (
-          <button key={id} onClick={() => { setActiveTab(id); setSelected(new Set()) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 18px', borderRadius: 7, border: 'none', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', transition: 'all 0.12s',
-              background: activeTab === id ? 'var(--teal)' : 'transparent',
-              color: activeTab === id ? 'white' : 'var(--slate)',
-            }}>
-            <Icon width={15} height={15} /> {label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs — admin sees both, accountant sees website only */}
+      {isAdmin ? (
+        <div style={{ display: 'flex', gap: 0, marginBottom: 20, background: 'var(--paper-raised)', border: '1px solid var(--line)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
+          {[['pdf', 'PDF Accessibility', IconFile], ['website', 'Website & Domain', IconGlobe]].map(([id, label, Icon]) => (
+            <button key={id} onClick={() => { setActiveTab(id); setSelected(new Set()) }}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 18px', borderRadius: 7, border: 'none', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', transition: 'all 0.12s',
+                background: activeTab === id ? 'var(--teal)' : 'transparent',
+                color: activeTab === id ? 'white' : 'var(--slate)',
+              }}>
+              <Icon width={15} height={15} /> {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, padding: '8px 18px', background: 'var(--teal)', borderRadius: 10, width: 'fit-content' }}>
+          <IconGlobe width={15} height={15} style={{ color: 'white' }} />
+          <span style={{ fontWeight: 600, fontSize: 13.5, color: 'white' }}>Website &amp; Domain</span>
+        </div>
+      )}
 
       <div className="stat-row" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
         <div className="stat-tile"><div className="stat-label">Pending ({stats.pendingCount})</div><div className="stat-value amber">{formatINR(stats.pending)}</div></div>
@@ -271,7 +278,7 @@ export default function LedgerPage() {
                         <button className="btn btn-ghost btn-sm" onClick={() => openEdit(e)}><IconEdit width={14} /></button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(e)}><IconTrash width={14} /></button>
                       </>}
-                      {(e.status === 'invoiced' || e.status === 'paid') && (
+                      {isAdmin && (e.status === 'invoiced' || e.status === 'paid') && (
                         <button className="btn btn-ghost btn-sm" onClick={() => setForceDeleteTarget(e)} title="Force delete" style={{ color: 'var(--red)', opacity: 0.7 }}><IconTrash width={14} /></button>
                       )}
                     </td>
