@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Modal from './Modal'
 import { useToast } from './Toast'
-import { isTamilNaduGSTIN, calculateGST, formatCurrency, formatINR, lineTotal } from '../lib/gst'
+import { isTamilNaduGSTIN, calculateGST, formatCurrency, formatINR, lineTotal, buildInvoiceFilename } from '../lib/gst'
 import { getNextInvoiceNumber, createInvoice, markEntriesInvoiced, getCompanyProfile } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { openPrintInvoice } from '../lib/printInvoice'
@@ -20,7 +20,7 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
   useEffect(() => {
     async function init() {
       try {
-        const num = await getNextInvoiceNumber()
+        const num = await getNextInvoiceNumber(invoiceDate)
         setInvoiceNumber(num)
         const tn = isTamilNaduGSTIN(client.gstin)
         setIsTN(tn === null ? true : tn)
@@ -29,6 +29,14 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
     }
     init()
   }, [])
+
+  async function handleDateChange(newDate) {
+    setInvoiceDate(newDate)
+    try {
+      const num = await getNextInvoiceNumber(newDate)
+      setInvoiceNumber(num)
+    } catch { /* keep existing number if refresh fails */ }
+  }
 
   const subtotal = entries.reduce((a, e) => a + (Number(e.line_total) || lineTotal(e)), 0)
   const applyGST = isINR && !client.is_international
@@ -55,7 +63,7 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
       })
       await markEntriesInvoiced(entries.map(e => e.id), invoice.id)
       const pdf = await generateInvoicePDF({ invoice, client, company, entries, templateType })
-      pdf.save(`${invoiceNumber.trim()}.pdf`)
+      pdf.save(buildInvoiceFilename(invoiceNumber.trim(), client.name))
       toast(`Invoice ${invoiceNumber} generated`, 'success')
       onGenerated()
     } catch (e) { toast(e.message || 'Could not generate invoice', 'error') }
@@ -110,7 +118,7 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
             </div>
             <div className="field">
               <label>Invoice date</label>
-              <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+              <input type="date" value={invoiceDate} onChange={e => handleDateChange(e.target.value)} />
             </div>
           </div>
 

@@ -71,3 +71,11 @@ export function lineTotal(entry) {
     (Number(entry.other_price) || 0)
   )
 }
+
+// Builds the standard invoice PDF filename:
+// Invoice_GNS-004-2026_ClientName  (from invoice_number "GNS/004/2026")
+export function buildInvoiceFilename(invoiceNumber, clientName) {
+  const safeNumber = (invoiceNumber || '').replace(/\//g, '-')
+  const safeClient = (clientName || 'Client').replace(/[^a-zA-Z0-9]+/g, '')
+  return `Invoice_${safeNumber}_${safeClient}.pdf`
+}

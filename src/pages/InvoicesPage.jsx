@@ -5,7 +5,7 @@ import { IconInvoice, IconDownload, IconCheck, IconEdit, IconTrash, IconAlert } 
 import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { openPrintInvoice } from '../lib/printInvoice'
-import { formatCurrency, formatINR } from '../lib/gst'
+import { formatCurrency, formatINR, buildInvoiceFilename } from '../lib/gst'
 
 export default function InvoicesPage({ isAdmin }) {
   const [invoices, setInvoices] = useState(null)
@@ -67,7 +67,7 @@ export default function InvoicesPage({ isAdmin }) {
       const entries = allEntries.filter(e => e.invoice_id === invoice.id)
       const client  = invoice.clients
       const pdf = await generateInvoicePDF({ invoice, client, company, entries })
-      pdf.save(`${invoice.invoice_number}.pdf`)
+      pdf.save(buildInvoiceFilename(invoice.invoice_number, invoice.clients?.name))
     } catch { toast('Could not regenerate PDF', 'error') }
   }
 

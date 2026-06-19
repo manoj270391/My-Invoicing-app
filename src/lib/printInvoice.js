@@ -12,7 +12,7 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
   const curr   = invoice.currency || 'INR'
   const isLUT  = templateType === 'lut' || invoice.template_type === 'lut'
   const isPdf  = client.client_type === 'pdf'
-  const navy   = company.accent_color || NAVY
+  const navy   = NAVY // fixed brand palette — not user-configurable
   const hsn    = isPdf ? company.hsn_pdf : company.hsn_website
 
   function hasRTL(str) {
@@ -202,7 +202,7 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       company.address,
       company.gstin ? 'GSTIN: ' + company.gstin : null,
       company.pan   ? 'PAN: '   + company.pan   : null,
-      company.tan   ? 'TAN: '   + company.tan   : null,
+      (!isPdf && company.tan) ? 'TAN: ' + company.tan : null,
       hsn           ? 'HSN/SAC: ' + hsn           : null,
       isLUT && company.lut_arn ? 'LUT ARN NO: ' + company.lut_arn : null,
       company.email,
@@ -260,8 +260,16 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
 </body>
 </html>`
 
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-  const url  = URL.createObjectURL(blob)
-  window.open(url, '_blank')
-  setTimeout(() => URL.revokeObjectURL(url), 60000)
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    // Popup blocked by browser — fall back to blob URL approach
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+    return
+  }
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
 }

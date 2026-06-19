@@ -26,7 +26,7 @@ export async function generateInvoicePDF({ invoice, client, company, entries, te
   const pageH = doc.internal.pageSize.getHeight()
   const ml = 48, mr = 48
   const contentW = pageW - ml - mr
-  const navy = company.accent_color ? hexToRgb(company.accent_color) : NAVY
+  const navy = NAVY // fixed brand palette — not user-configurable
   const curr  = invoice.currency || 'INR'
   const isLUT = templateType === 'lut' || invoice.template_type === 'lut'
   const isPdf = client.client_type === 'pdf'
@@ -88,7 +88,7 @@ export async function generateInvoicePDF({ invoice, client, company, entries, te
     company.address,
     company.gstin ? `GSTIN: ${company.gstin}` : null,
     company.pan   ? `PAN: ${company.pan}`     : null,
-    company.tan   ? `TAN: ${company.tan}`     : null,
+    (!isPdf && company.tan) ? `TAN: ${company.tan}` : null,
     hsn           ? `HSN/SAC: ${hsn}`          : null,
     isLUT && company.lut_arn ? `LUT ARN NO: ${company.lut_arn}` : null,
     company.email,

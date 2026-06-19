@@ -128,11 +128,12 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="field">
-              <label>Invoice accent color</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input type="color" value={profile.accent_color} onChange={e => set({ accent_color: e.target.value })} style={{ width: 44, height: 36, padding: 2, border: '1px solid var(--line-strong)', borderRadius: 6 }} />
-                <input className="mono" value={profile.accent_color} onChange={e => set({ accent_color: e.target.value })} style={{ width: 110 }} />
-                <span style={{ fontSize: 12.5, color: 'var(--slate)' }}>Used for invoice headers, totals, and highlights</span>
+              <label>Invoice brand color</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--paper)', borderRadius: 8, border: '1px solid var(--line)' }}>
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: '#374961', flexShrink: 0 }} />
+                <span style={{ fontSize: 12.5, color: 'var(--slate)' }}>
+                  Fixed to your brand navy (<span className="mono">#374961</span>) on every invoice — matches your logo. Not user-configurable.
+                </span>
               </div>
             </div>
           </>

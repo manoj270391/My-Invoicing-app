@@ -191,19 +191,40 @@ export async function updateInvoiceStatus(id, status, inrEquivalent) {
   return updateInvoice(id, patch)
 }
 
-export async function getNextInvoiceNumber() {
+// Indian financial year: April 1 to March 31.
+// FY label = the calendar year in which the FY *starts* (e.g. Apr 2026-Mar 2027 = "2026")
+export function getFinancialYear(date = new Date()) {
+  const d = new Date(date)
+  const month = d.getMonth() // 0 = Jan
+  const year = d.getFullYear()
+  return month >= 3 ? year : year - 1 // April (index 3) onward = current year FY
+}
+
+const INVOICE_PREFIX = 'GNS'
+
+export async function getNextInvoiceNumber(forDate = new Date()) {
+  const fy = getFinancialYear(forDate)
+  const fyStart = `${fy}-04-01`
+  const fyEnd   = `${fy + 1}-03-31`
+
   const { data, error } = await supabase
     .from('invoices')
     .select('invoice_number')
+    .gte('invoice_date', fyStart)
+    .lte('invoice_date', fyEnd)
     .order('created_at', { ascending: false })
-    .limit(1)
+    .limit(200) // safety cap; sequence numbers are reset yearly so this is plenty
+
   if (error) throw error
-  if (!data || data.length === 0) return 'INV-0001'
-  const last = data[0].invoice_number
-  const match = last.match(/(\d+)$/)
-  if (!match) return 'INV-0001'
-  const nextNum = String(Number(match[1]) + 1).padStart(match[1].length, '0')
-  return last.slice(0, match.index) + nextNum
+
+  let maxSeq = 0
+  for (const row of data || []) {
+    const m = row.invoice_number?.match(/^GNS\/(\d{3,})\/\d{4}$/)
+    if (m) maxSeq = Math.max(maxSeq, Number(m[1]))
+  }
+
+  const nextSeq = String(maxSeq + 1).padStart(3, '0')
+  return `${INVOICE_PREFIX}/${nextSeq}/${fy}`
 }
 
 // ── Recurring templates ───────────────────────────────────────
