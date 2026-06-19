@@ -331,7 +331,10 @@ export default function LedgerPage({ isAdmin = true }) {
           <div className="field-row">
             <div className="field">
               <label>Client</label>
-              <select value={editing.client_id} onChange={e => setEditing({ ...editing, client_id: e.target.value })}>
+              <select value={editing.client_id} onChange={e => {
+                const selectedClient = clients.find(c => c.id === e.target.value)
+                setEditing({ ...editing, client_id: e.target.value, currency: selectedClient?.currency || editing.currency })
+              }}>
                 <option value="">Select client…</option>
                 {clients.filter(c => c.client_type === editing.entry_type).map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>

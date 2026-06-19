@@ -89,7 +89,10 @@ export default function SettingsPage() {
             </div>
             <div className="field-row">
               <div className="field"><label>TAN</label><input className="mono" value={profile.tan} onChange={e => set({ tan: e.target.value.toUpperCase() })} placeholder="ABCD12345E" maxLength={10} /></div>
-              <div className="field"><label>HSN / SAC Code</label><input className="mono" value={profile.hsn_sac} onChange={e => set({ hsn_sac: e.target.value })} placeholder="998314" /></div>
+            </div>
+            <div className="field-row">
+              <div className="field"><label>HSN/SAC — PDF Accessibility</label><input className="mono" value={profile.hsn_pdf} onChange={e => set({ hsn_pdf: e.target.value })} placeholder="998431" /></div>
+              <div className="field"><label>HSN/SAC — Website &amp; Domain</label><input className="mono" value={profile.hsn_website} onChange={e => set({ hsn_website: e.target.value })} placeholder="998313" /></div>
             </div>
             <div className="section-label">Export / international</div>
             <div className="field-row">

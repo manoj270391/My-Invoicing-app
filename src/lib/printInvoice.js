@@ -1,5 +1,8 @@
 import { formatPDF, lineTotal } from './gst'
 
+const NAVY = '#374961'
+const GOLD = '#C49A3D'
+
 /**
  * Opens a new browser tab with a fully styled, print-ready invoice.
  * Uses browser fonts so all Unicode (Hebrew, Arabic, etc.) renders correctly.
@@ -9,15 +12,14 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
   const curr   = invoice.currency || 'INR'
   const isLUT  = templateType === 'lut' || invoice.template_type === 'lut'
   const isPdf  = client.client_type === 'pdf'
-  const accent = company.accent_color || '#0F6B5C'
+  const navy   = company.accent_color || NAVY
+  const hsn    = isPdf ? company.hsn_pdf : company.hsn_website
 
-  // Detect if any text contains Hebrew/RTL characters
   function hasRTL(str) {
     if (!str) return false
     return /[\u0590-\u05FF\u0600-\u06FF\uFB1D-\uFDFD\uFE70-\uFEFF]/.test(str)
   }
 
-  // Build line item rows
   function buildRows() {
     if (isPdf) {
       return entries.map(e => {
@@ -32,7 +34,6 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       }).join('')
     }
 
-    // Website entries — expand service_items
     return entries.flatMap(e => {
       const items = (e.service_items?.filter(i => i.description?.trim()).length > 0)
         ? e.service_items.filter(i => i.description?.trim())
@@ -74,26 +75,14 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       </div>`
   }
 
-  // GST / tax rows
   function taxRows() {
-    if (isLUT) return `<tr><td>GST</td><td class="num">Nil (LUT)</td></tr>`
+    if (isLUT) return ''
     if (invoice.is_tamil_nadu) return `
       <tr><td>CGST (9%)</td><td class="num">${formatPDF(invoice.cgst, curr)}</td></tr>
       <tr><td>SGST (9%)</td><td class="num">${formatPDF(invoice.sgst, curr)}</td></tr>`
     if (invoice.igst > 0) return `<tr><td>IGST (18%)</td><td class="num">${formatPDF(invoice.igst, curr)}</td></tr>`
     return ''
   }
-
-  // Footer fields
-  const footerParts = [
-    company.bank_details,
-    company.gstin   ? `GSTIN: ${company.gstin}`     : null,
-    company.tan     ? `TAN: ${company.tan}`          : null,
-    isLUT && company.lut_arn ? `LUT ARN: ${company.lut_arn}` : null,
-    company.hsn_sac ? `HSN/SAC: ${company.hsn_sac}` : null,
-    company.website,
-    company.email,
-  ].filter(Boolean).join('&nbsp;&nbsp;·&nbsp;&nbsp;')
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -111,7 +100,6 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       font-size: 10pt;
       color: #1C2433;
       background: white;
-      padding: 0;
     }
 
     .page {
@@ -120,7 +108,6 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       padding: 40px 48px 60px;
     }
 
-    /* ── Header ── */
     .header {
       display: flex;
       justify-content: space-between;
@@ -128,117 +115,46 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       margin-bottom: 28px;
     }
     .logo img { max-height: 55px; max-width: 130px; object-fit: contain; }
-    .logo-placeholder {
-      font-size: 18pt; font-weight: 800; color: ${accent};
-    }
+    .logo-placeholder { font-size: 18pt; font-weight: 800; color: ${navy}; }
     .invoice-meta { text-align: right; }
-    .invoice-title {
-      font-size: 22pt; font-weight: 800;
-      color: #1C2433; letter-spacing: -0.02em;
-    }
-    .invoice-number {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 10pt; color: #5B6472; margin-top: 4px;
-    }
+    .invoice-title { font-size: 22pt; font-weight: 800; color: #1C2433; letter-spacing: -0.02em; }
+    .invoice-number { font-family: 'IBM Plex Mono', monospace; font-size: 10pt; color: #5B6472; margin-top: 4px; }
     .invoice-date { font-size: 9.5pt; color: #5B6472; margin-top: 2px; }
-    .lut-badge {
-      display: inline-block; margin-top: 6px;
-      background: ${accent}22; color: ${accent};
-      font-size: 8pt; font-weight: 700;
-      padding: 3px 8px; border-radius: 4px;
-      border: 1px solid ${accent}55;
-    }
 
-    /* ── Divider ── */
-    hr { border: none; border-top: 1px solid #E4E0D6; margin: 0 0 22px; }
+    hr { border: none; border-top: 1px solid #DCD8CE; margin: 0 0 22px; }
 
-    /* ── Address blocks ── */
-    .addr-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-bottom: 28px;
-    }
-    .addr-label {
-      font-size: 7.5pt; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      color: ${accent}; margin-bottom: 6px;
-    }
-    .addr-name {
-      font-size: 12pt; font-weight: 700;
-      color: #1C2433; margin-bottom: 5px;
-    }
+    .addr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+    .addr-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: ${navy}; margin-bottom: 6px; }
+    .addr-name { font-size: 12pt; font-weight: 700; color: #1C2433; margin-bottom: 5px; }
     .addr-lines { font-size: 9pt; color: #5B6472; line-height: 1.7; }
 
-    /* ── Table ── */
-    table {
-      width: 100%; border-collapse: collapse;
-      margin-bottom: 16px;
-    }
-    thead tr {
-      background: #1C2433;
-      color: white;
-    }
-    thead th {
-      padding: 9px 12px;
-      font-size: 8.5pt; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.04em;
-      text-align: left;
-    }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    thead tr { background: ${navy}; color: white; }
+    thead th { padding: 9px 12px; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; text-align: left; }
     thead th.num { text-align: right; }
 
     tbody tr:nth-child(even) { background: #F8F6F1; }
-    tbody td {
-      padding: 8px 12px;
-      font-size: 9.5pt;
-      color: #2E394E;
-      border-bottom: 1px solid #EEE;
-    }
-    td.num {
-      text-align: right;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 9pt;
-      white-space: nowrap;
-    }
+    tbody td { padding: 8px 12px; font-size: 9.5pt; color: #2E394E; border-bottom: 1px solid #EEE; }
+    td.num { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 9pt; white-space: nowrap; }
 
-    /* ── Totals ── */
-    .totals {
-      display: flex;
-      justify-content: flex-end;
-      margin-bottom: 28px;
-    }
+    .totals { display: flex; justify-content: flex-end; margin-bottom: 28px; }
     .totals-inner { width: 240px; }
     .totals-inner table { margin-bottom: 0; }
-    .totals-inner td { border-bottom: none; padding: 4px 8px; font-size: 9.5pt; }
+    .totals-inner td { border-bottom: none; padding: 4px 8px; font-size: 9.5pt; color: #5B6472; }
     .totals-inner .total-row td {
-      font-size: 11pt; font-weight: 700;
-      color: ${accent};
-      border-top: 1.5px solid #E4E0D6;
-      padding-top: 8px;
+      font-size: 11pt; font-weight: 700; color: ${navy};
+      border-top: 1.5px solid ${navy}; padding-top: 8px;
     }
 
-    /* ── Footer ── */
-    .footer {
-      border-top: 1px solid #E4E0D6;
+    .footer-note {
+      border-top: 1px solid #DCD8CE;
       padding-top: 16px;
       margin-top: 8px;
+      text-align: center;
     }
-    .footer-label {
-      font-size: 7.5pt; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      color: ${accent}; margin-bottom: 8px;
-    }
-    .footer-content {
-      font-size: 8.5pt; color: #5B6472;
-      line-height: 1.8;
-      white-space: pre-line;
-    }
-    .footer-meta {
-      margin-top: 12px; font-size: 8pt;
-      color: #AAA; text-align: center;
-    }
+    .footer-note .line1 { font-size: 8.5pt; color: #5B6472; font-style: italic; margin-bottom: 8px; }
+    .footer-note .line2 { font-size: 9.5pt; color: ${navy}; font-weight: 600; }
 
-    /* ── Print styles ── */
     @media print {
       body { padding: 0; }
       .page { padding: 20px 32px 40px; max-width: 100%; }
@@ -246,7 +162,6 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       @page { margin: 10mm; size: A4; }
     }
 
-    /* ── Print button (screen only) ── */
     .print-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
       background: #1C2433; padding: 14px 24px;
@@ -255,7 +170,7 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
     }
     .print-bar span { color: rgba(255,255,255,0.7); font-size: 13px; }
     .print-btn {
-      background: ${accent}; color: white;
+      background: ${navy}; color: white;
       border: none; border-radius: 8px;
       padding: 10px 24px; font-size: 13px; font-weight: 700;
       cursor: pointer; font-family: inherit;
@@ -267,7 +182,6 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
 
 <div class="page">
 
-  <!-- Header -->
   <div class="header">
     <div class="logo">
       ${company.logo_url
@@ -278,35 +192,33 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
       <div class="invoice-title">INVOICE</div>
       <div class="invoice-number">${invoice.invoice_number}</div>
       <div class="invoice-date">Date: ${fmtDate(invoice.invoice_date)}</div>
-      ${isLUT ? `<div class="lut-badge">Export of Services · LUT · Zero GST${company.lut_arn ? ' · ARN: ' + company.lut_arn : ''}</div>` : ''}
     </div>
   </div>
 
   <hr />
 
-  <!-- Address blocks -->
   <div class="addr-row">
     ${addrBlock('From', company.company_name, [
       company.address,
       company.gstin ? 'GSTIN: ' + company.gstin : null,
       company.pan   ? 'PAN: '   + company.pan   : null,
       company.tan   ? 'TAN: '   + company.tan   : null,
+      hsn           ? 'HSN/SAC: ' + hsn           : null,
+      isLUT && company.lut_arn ? 'LUT ARN NO: ' + company.lut_arn : null,
       company.email,
       company.phone,
-      company.website,
     ])}
     ${addrBlock('Bill To', client.name, [
       client.address,
       client.gstin        ? 'GSTIN: '   + client.gstin        : null,
       client.vat_number   ? 'VAT: '     + client.vat_number   : null,
-      client.tax_id       ? 'Tax ID: '  + client.tax_id       : null,
-      client.business_reg ? 'Reg No: '  + client.business_reg : null,
+      client.tax_id        ? 'Tax ID: '  + client.tax_id        : null,
+      client.business_reg  ? 'Reg No: '  + client.business_reg  : null,
       client.email,
       client.phone,
     ])}
   </div>
 
-  <!-- Line items -->
   <table>
     <thead>
       <tr>
@@ -320,7 +232,6 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
     </tbody>
   </table>
 
-  <!-- Totals -->
   <div class="totals">
     <div class="totals-inner">
       <table>
@@ -334,18 +245,13 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
     </div>
   </div>
 
-  <!-- Footer -->
-  ${footerParts ? `
-  <div class="footer">
-    <div class="footer-label">Payment &amp; Company Details</div>
-    <div class="footer-content">${footerParts}</div>
-  </div>` : ''}
-
-  <div class="footer-meta">Thank you for your business.</div>
+  <div class="footer-note">
+    <div class="line1">This is an Invoice Bill in PDF format and does not require signature.</div>
+    <div class="line2">Thank you for your business.</div>
+  </div>
 
 </div>
 
-<!-- Print bar (hidden when printing) -->
 <div class="print-bar no-print">
   <span>Review the invoice, then click Print to save as PDF — works perfectly with Hebrew and all languages.</span>
   <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
@@ -357,6 +263,5 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url  = URL.createObjectURL(blob)
   window.open(url, '_blank')
-  // Clean up after a delay
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
