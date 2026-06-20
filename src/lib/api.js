@@ -255,14 +255,41 @@ export async function deleteRecurringTemplate(id) {
 }
 
 // ── Dashboard analytics ───────────────────────────────────────
-export async function getDashboardStats() {
-  const [invRes, entRes] = await Promise.all([
-    supabase.from('invoices').select('total, status, currency, inr_equivalent, invoice_date, clients(name, client_type)'),
-    supabase.from('entries').select('line_total, status, entry_type, currency, entry_date'),
-  ])
+export async function getDashboardStats(fyStartYear) {
+  let invQuery = supabase.from('invoices').select('total, status, currency, inr_equivalent, invoice_date, clients(name, client_type)')
+  let entQuery = supabase.from('entries').select('line_total, status, entry_type, currency, entry_date, clients(name, client_type)')
+
+  if (fyStartYear != null) {
+    const fyStart = `${fyStartYear}-04-01`
+    const fyEnd   = `${fyStartYear + 1}-03-31`
+    invQuery = invQuery.gte('invoice_date', fyStart).lte('invoice_date', fyEnd)
+    entQuery = entQuery.gte('entry_date', fyStart).lte('entry_date', fyEnd)
+  }
+
+  const [invRes, entRes] = await Promise.all([invQuery, entQuery])
   if (invRes.error) throw invRes.error
   if (entRes.error) throw entRes.error
   return { invoices: invRes.data, entries: entRes.data }
+}
+
+// Returns the list of financial-year start-years that have any data at all
+// (based on the earliest invoice/entry date on record), so the dashboard's
+// FY selector only shows years that are actually relevant.
+export async function getAvailableFinancialYears() {
+  const [invRes, entRes] = await Promise.all([
+    supabase.from('invoices').select('invoice_date').order('invoice_date', { ascending: true }).limit(1),
+    supabase.from('entries').select('entry_date').order('entry_date', { ascending: true }).limit(1),
+  ])
+  if (invRes.error) throw invRes.error
+  if (entRes.error) throw entRes.error
+
+  const dates = [invRes.data?.[0]?.invoice_date, entRes.data?.[0]?.entry_date].filter(Boolean)
+  const earliestFY = dates.length > 0 ? getFinancialYear(Math.min(...dates.map(d => new Date(d).getTime()))) : getFinancialYear()
+  const currentFY = getFinancialYear()
+
+  const years = []
+  for (let fy = currentFY + 1; fy >= earliestFY; fy--) years.push(fy) // include one year ahead for convenience
+  return years
 }
 
 // ── Audit log ─────────────────────────────────────────────────

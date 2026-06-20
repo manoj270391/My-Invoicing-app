@@ -98,3 +98,22 @@ export function entriesContainRTL(entries, client) {
   }
   return false
 }
+
+// Indian financial year helpers — kept in sync with the FY logic in api.js
+// (April 1 to March 31). FY label = calendar year the FY starts in.
+export function getFinancialYearRange(fyStartYear) {
+  return {
+    start: `${fyStartYear}-04-01`,
+    end: `${fyStartYear + 1}-03-31`,
+  }
+}
+
+export function formatFinancialYearLabel(fyStartYear) {
+  return `FY ${fyStartYear}–${fyStartYear + 1}`
+}
+
+export function formatFinancialYearDateRange(fyStartYear) {
+  const { start, end } = getFinancialYearRange(fyStartYear)
+  const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${fmt(start)} – ${fmt(end)}`
+}
