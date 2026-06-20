@@ -34,10 +34,12 @@ const bidi = bidiFactory()
 // and a digit anywhere in the same call, jsPDF's text shaping silently
 // re-reverses the digit run (e.g. "12-25" renders as "52-21") even though
 // the string handed to it is already in correct visual order. A leading
-// Left-to-Right Mark (U+200E) — a real Unicode formatting character with
-// zero rendering width (verified: getTextWidth('\u200E') === 0) — reliably
-// defeats this without adding any visible mark or affecting layout/alignment
-// math. Verified against Chrome's bidi rendering across every test pattern.
+// Left-to-Right Mark (U+200E) reliably defeats this and has zero advance
+// width (verified: getTextWidth('\u200E') === 0, so it never affects layout
+// or right-alignment math). The embedded font's glyph for U+200E has been
+// cleared to an empty outline (see notoSansHebrew.js) — the original Noto
+// Sans Hebrew font draws a visible mark for this character, which would
+// otherwise appear as a stray symbol before every Hebrew string.
 const LRM = '\u200E'
 
 function toVisualOrder(text) {
