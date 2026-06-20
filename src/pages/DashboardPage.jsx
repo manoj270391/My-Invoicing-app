@@ -304,11 +304,12 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            <div className="card card-pad">
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by month — {formatFinancialYearLabel(selectedFY)} (paid, INR)</div>
-              <BarChart data={derived.months} valueKey="total" labelKey="label" color="var(--teal)" />
-            </div>
+          <div className="card card-pad" style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by month — {formatFinancialYearLabel(selectedFY)} (paid, INR)</div>
+            <BarChart data={derived.months} valueKey="total" labelKey="label" color="var(--teal)" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="card card-pad">
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by client (PDF Accessibility)</div>
               <BarChart
@@ -337,41 +338,41 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="card card-pad">
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by service type</div>
-            {[
-              ['PDF Accessibility', derived.pdfByCurrency, 'var(--teal)', derived.pdfTotalReceivedINR],
-              ['Website & Domain', derived.webByCurrency, 'var(--amber)', null],
-            ].map(([label, byCurrency, col, receivedINR]) => (
-              <div key={label} style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
-                  {receivedINR != null && (
-                    <div style={{ fontSize: 12, color: 'var(--slate)' }}>
-                      Received: <span className="mono" style={{ fontWeight: 700, color: 'var(--teal)' }}>{formatINR(receivedINR)}</span>
-                    </div>
-                  )}
+            <div className="card card-pad">
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by service type</div>
+              {[
+                ['PDF Accessibility', derived.pdfByCurrency, 'var(--teal)', derived.pdfTotalReceivedINR],
+                ['Website & Domain', derived.webByCurrency, 'var(--amber)', null],
+              ].map(([label, byCurrency, col, receivedINR]) => (
+                <div key={label} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+                    {receivedINR != null && (
+                      <div style={{ fontSize: 12, color: 'var(--slate)' }}>
+                        Received: <span className="mono" style={{ fontWeight: 700, color: 'var(--teal)' }}>{formatINR(receivedINR)}</span>
+                      </div>
+                    )}
+                  </div>
+                  {byCurrency.length === 0 ? (
+                    <div style={{ fontSize: 12.5, color: 'var(--slate-light)' }}>No entries yet</div>
+                  ) : byCurrency.map(([cur, amt]) => {
+                    const maxInGroup = Math.max(...byCurrency.map(([, a]) => a), 1)
+                    return (
+                      <div key={cur} style={{ marginBottom: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+                          <span style={{ color: 'var(--slate)' }}>{cur}</span>
+                          <span className="mono" style={{ fontWeight: 600 }}>{formatCurrency(amt, cur)}</span>
+                        </div>
+                        <div style={{ background: 'var(--line)', borderRadius: 4, height: 7 }}>
+                          <div style={{ background: col, borderRadius: 4, height: 7, width: `${(amt / maxInGroup) * 100}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                {byCurrency.length === 0 ? (
-                  <div style={{ fontSize: 12.5, color: 'var(--slate-light)' }}>No entries yet</div>
-                ) : byCurrency.map(([cur, amt]) => {
-                  const maxInGroup = Math.max(...byCurrency.map(([, a]) => a), 1)
-                  return (
-                    <div key={cur} style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
-                        <span style={{ color: 'var(--slate)' }}>{cur}</span>
-                        <span className="mono" style={{ fontWeight: 600 }}>{formatCurrency(amt, cur)}</span>
-                      </div>
-                      <div style={{ background: 'var(--line)', borderRadius: 4, height: 7 }}>
-                        <div style={{ background: col, borderRadius: 4, height: 7, width: `${(amt / maxInGroup) * 100}%` }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </>
       )}
