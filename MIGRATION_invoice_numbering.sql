@@ -1,0 +1,14 @@
+-- No database changes required for the new invoice numbering format.
+-- The new format (GNS/001/2026) only applies to invoices created AFTER
+-- this update. Existing invoices keep their old numbers (e.g. INV-0001)
+-- and are not renumbered automatically — this preserves your invoice history.
+--
+-- The sequence number resets to 001 automatically every April 1st
+-- (start of the new Indian financial year), and only counts invoices
+-- whose invoice_date falls within the current financial year.
+--
+-- If you want to manually set a starting sequence number higher than 001
+-- (e.g. continuing from your old numbering), you can pre-insert a dummy
+-- invoice row with the desired starting number - 1, dated within the
+-- current financial year, with status set appropriately. Ask if you'd
+-- like help with this.
