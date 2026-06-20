@@ -117,12 +117,22 @@ export default function DashboardPage() {
     const topClients = Object.entries(byClient).sort((a, b) => b[1] - a[1]).slice(0, 5)
       .map(([name, total]) => ({ name: name.length > 16 ? name.slice(0, 14) + '…' : name, total }))
 
-    // By service type (INR-denominated entries only, for consistency)
-    const pdfTotal = entries.filter(e => e.entry_type === 'pdf' && (!e.currency || e.currency === 'INR')).reduce((s, e) => s + (e.line_total || 0), 0)
-    const webTotal = entries.filter(e => e.entry_type === 'website' && (!e.currency || e.currency === 'INR')).reduce((s, e) => s + (e.line_total || 0), 0)
+    // By service type — grouped by currency (PDF clients are mostly
+    // international/foreign currency, so forcing INR-only hid all their data)
+    function groupByCurrency(arr) {
+      const byCur = {}
+      arr.forEach(e => {
+        const cur = e.currency || 'INR'
+        byCur[cur] = (byCur[cur] || 0) + (e.line_total || 0)
+      })
+      return Object.entries(byCur).sort((a, b) => b[1] - a[1])
+    }
+    const pdfByCurrency = groupByCurrency(entries.filter(e => e.entry_type === 'pdf'))
+    const webByCurrency = groupByCurrency(entries.filter(e => e.entry_type === 'website'))
 
     return {
-      paid, unpaid, totalInv, unpaidCount, months, topClients, pdfTotal, webTotal,
+      paid, unpaid, totalInv, unpaidCount, months, topClients,
+      pdfByCurrency, webByCurrency,
       unconvertedCount, unpaidForeignByCurrency, pendingCurrencies,
     }
   }, [stats])
@@ -198,19 +208,26 @@ export default function DashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div className="card card-pad">
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by service type (INR)</div>
-          {[['PDF Accessibility', derived.pdfTotal, 'var(--teal)'], ['Website & Domain', derived.webTotal, 'var(--amber)']].map(([label, val, col]) => (
-            <div key={label} style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                <span>{label}</span>
-                <span className="mono" style={{ fontWeight: 600 }}>{formatINR(val)}</span>
-              </div>
-              <div style={{ background: 'var(--line)', borderRadius: 4, height: 8 }}>
-                <div style={{
-                  background: col, borderRadius: 4, height: 8,
-                  width: `${derived.pdfTotal + derived.webTotal > 0 ? (val / (derived.pdfTotal + derived.webTotal)) * 100 : 0}%`,
-                }} />
-              </div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by service type</div>
+          {[['PDF Accessibility', derived.pdfByCurrency, 'var(--teal)'], ['Website & Domain', derived.webByCurrency, 'var(--amber)']].map(([label, byCurrency, col]) => (
+            <div key={label} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</div>
+              {byCurrency.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: 'var(--slate-light)' }}>No entries yet</div>
+              ) : byCurrency.map(([cur, amt]) => {
+                const maxInGroup = Math.max(...byCurrency.map(([, a]) => a), 1)
+                return (
+                  <div key={cur} style={{ marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
+                      <span style={{ color: 'var(--slate)' }}>{cur}</span>
+                      <span className="mono" style={{ fontWeight: 600 }}>{formatCurrency(amt, cur)}</span>
+                    </div>
+                    <div style={{ background: 'var(--line)', borderRadius: 4, height: 7 }}>
+                      <div style={{ background: col, borderRadius: 4, height: 7, width: `${(amt / maxInGroup) * 100}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           ))}
         </div>

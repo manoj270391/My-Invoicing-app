@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import { formatPDF, lineTotal } from './gst'
+import { formatPDF, lineTotal, buildInvoiceFilename } from './gst'
 
 // Brand palette (fallback if company hasn't set custom colors)
 const NAVY = [55, 73, 97]      // #374961
@@ -21,7 +21,15 @@ function loadImage(url) {
 }
 
 export async function generateInvoicePDF({ invoice, client, company, entries, templateType }) {
-  const doc   = new jsPDF({ unit: 'pt', format: 'a4' })
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+
+  // Document properties — Title matches the filename, Author is fixed to GNS
+  const titleBase = buildInvoiceFilename(invoice.invoice_number, client.name).replace(/\.pdf$/, '')
+  doc.setProperties({ title: titleBase, author: 'GNS', creator: 'GNS' })
+
+  // Force PDF viewers to open at 100% zoom (not "fit width"/"fit page")
+  doc.setDisplayMode('100%', 'continuous', 'UseNone')
+
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
   const ml = 48, mr = 48
