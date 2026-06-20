@@ -463,7 +463,7 @@ export default function LedgerPage({ isAdmin = true }) {
             </div>
           </div>
           <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6, margin: '0 0 4px' }}>
-            Entry: <strong>{forceDeleteTarget?.file_name || forceDeleteTarget?.service_items?.[0]?.description || 'this entry'}</strong>. This cannot be undone.
+            Entry: <strong><bdi>{forceDeleteTarget?.file_name || forceDeleteTarget?.service_items?.[0]?.description || 'this entry'}</bdi></strong>. This cannot be undone.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setForceDeleteTarget(null)}>Cancel</button>

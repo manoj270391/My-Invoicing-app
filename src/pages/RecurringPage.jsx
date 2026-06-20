@@ -212,7 +212,7 @@ export default function RecurringPage() {
 
       {confirmDelete && (
         <Modal title="Delete template?" onClose={() => setConfirmDelete(null)} width={400}>
-          <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6 }}>Delete the recurring template <strong>{confirmDelete.name}</strong>? This won't affect existing ledger entries.</p>
+          <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6 }}>Delete the recurring template <strong><bdi>{confirmDelete.name}</bdi></strong>? This won't affect existing ledger entries.</p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
             <button className="btn btn-danger" onClick={async () => { await deleteRecurringTemplate(confirmDelete.id); setConfirmDelete(null); load() }}>Delete</button>

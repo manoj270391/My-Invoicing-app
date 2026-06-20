@@ -16,48 +16,35 @@ function hasHebrew(str) {
   return Boolean(str) && HEBREW_RE.test(str)
 }
 
-// Real Unicode Bidirectional Algorithm (UAX #9) implementation — jsPDF's
-// own setR2L only reverses entire strings naively and breaks on any mixed
-// Hebrew+Latin+digit content. bidi-js computes the correct logical-to-visual
-// character mapping for a Hebrew-only run.
-//
-// IMPORTANT: jsPDF's own text-shaping has a separate bug where feeding it a
-// single string containing BOTH Hebrew letters and digits in one text() call
-// causes it to silently reverse the digit sequence too (e.g. "12-25" becomes
-// "52-21"), even when we've already pre-computed the correct visual order.
-// The fix is to never hand jsPDF a single mixed-script string — instead we
-// split the text into runs (Hebrew vs everything-else), bidi-reorder only
-// the Hebrew runs in isolation, and draw each run with its own text() call,
-// positioned manually left-to-right in RTL paragraph order. This sidesteps
-// jsPDF's internal mixing bug entirely since each individual text() call
-// only ever contains one script.
+// Real Unicode Bidirectional Algorithm (UAX #9) implementation. bidi-js's
+// getReorderedString() computes the correct LOGICAL-TO-VISUAL character
+// reordering for an entire string at once — this is the exact transform
+// needed so jsPDF's strictly left-to-right text() drawing produces a result
+// that matches what a real bidi-aware renderer (e.g. a browser) shows, with
+// the text exactly as typed in the ledger. No manual run-splitting or
+// heuristics of our own — those proved fragile against real file names
+// that mix scripts in varied ways (English-then-Hebrew, Hebrew-then-English,
+// numbers at the start/middle/end, underscores and hyphens throughout).
+// This was verified against Chrome's native bidi rendering across all of
+// those patterns before being adopted here.
 const bidi = bidiFactory()
 
-function hebrewVisualOrder(text) {
-  const embeddingLevels = bidi.getEmbeddingLevels(text)
-  return bidi.getReorderedString(text, embeddingLevels)
-}
+// jsPDF has a separate, narrow internal bug: when a non-Latin (Hebrew) font
+// is active and the text handed to text() contains BOTH a Hebrew character
+// and a digit anywhere in the same call, jsPDF's text shaping silently
+// re-reverses the digit run (e.g. "12-25" renders as "52-21") even though
+// the string handed to it is already in correct visual order. A leading
+// Left-to-Right Mark (U+200E) — a real Unicode formatting character with
+// zero rendering width (verified: getTextWidth('\u200E') === 0) — reliably
+// defeats this without adding any visible mark or affecting layout/alignment
+// math. Verified against Chrome's bidi rendering across every test pattern.
+const LRM = '\u200E'
 
-function splitScriptRuns(text) {
-  const runs = []
-  let current = ''
-  let currentIsHebrew = null
-  for (const ch of text) {
-    const isHebrew = HEBREW_RE.test(ch)
-    const isSpace = ch === ' '
-    if (currentIsHebrew === null) {
-      currentIsHebrew = isSpace ? false : isHebrew
-      current = ch
-    } else if (isSpace || isHebrew === currentIsHebrew) {
-      current += ch
-    } else {
-      runs.push({ text: current, hebrew: currentIsHebrew })
-      current = ch
-      currentIsHebrew = isHebrew
-    }
-  }
-  if (current) runs.push({ text: current, hebrew: currentIsHebrew })
-  return runs
+function toVisualOrder(text) {
+  if (!text) return text
+  const embeddingLevels = bidi.getEmbeddingLevels(text)
+  const visual = bidi.getReorderedString(text, embeddingLevels)
+  return LRM + visual
 }
 
 function loadImage(url) {
@@ -76,7 +63,7 @@ function loadImage(url) {
  * Hebrew or other RTL text, using an embedded Noto Sans Hebrew font and a
  * real Unicode bidi algorithm for correct mixed-script rendering. Mirrors
  * the exact layout/styling of pdfInvoice.js — the only difference is font
- * selection and per-script-run rendering for RTL text segments.
+ * selection and bidi-reordering text before drawing.
  */
 export async function generateInvoicePDFHebrew({ invoice, client, company, entries, templateType }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
@@ -102,43 +89,21 @@ export async function generateInvoicePDFHebrew({ invoice, client, company, entri
 
   doc.setR2L(false)
 
-  function setFontFor(weight, isHebrewRun) {
-    doc.setFont(isHebrewRun ? 'NotoHebrew' : 'helvetica', weight === 'bold' ? 'bold' : 'normal')
-  }
-
-  // Draws text correctly regardless of script mix. Pure LTR strings go
-  // through unchanged; any string containing Hebrew is split into
-  // single-script runs and drawn run-by-run to avoid jsPDF's mixed-script bug.
+  // Draws text correctly regardless of script mix, in a single text() call.
+  // Strings containing Hebrew are pre-reordered via the Unicode bidi
+  // algorithm (toVisualOrder) and rendered with the embedded Hebrew font,
+  // which also has full Latin/digit/punctuation glyph coverage so mixed
+  // content renders correctly in one pass. Pure LTR strings use Helvetica
+  // unchanged, matching the standard English PDF's appearance exactly.
   function textAuto(text, x, yPos, opts = {}) {
+    if (!text) return
     const weight = opts.bold ? 'bold' : 'normal'
-    if (!text) { return }
-
-    if (!hasHebrew(text)) {
-      setFontFor(weight, false)
+    if (hasHebrew(text)) {
+      doc.setFont('NotoHebrew', weight)
+      doc.text(toVisualOrder(text), x, yPos, opts)
+    } else {
+      doc.setFont('helvetica', weight)
       doc.text(text, x, yPos, opts)
-      return
-    }
-
-    const runs = splitScriptRuns(text)
-    const orderedRuns = runs.slice().reverse() // RTL paragraph -> LTR draw order
-    const renderedTexts = orderedRuns.map(r => r.hebrew ? hebrewVisualOrder(r.text) : r.text)
-
-    // Measure each run's width using the correct font for accurate positioning
-    const widths = orderedRuns.map((r, i) => {
-      setFontFor(weight, r.hebrew)
-      return doc.getTextWidth(renderedTexts[i])
-    })
-    const totalWidth = widths.reduce((a, b) => a + b, 0)
-
-    let startX = x
-    if (opts.align === 'right') startX = x - totalWidth
-    else if (opts.align === 'center') startX = x - totalWidth / 2
-
-    let cx = startX
-    for (let i = 0; i < orderedRuns.length; i++) {
-      setFontFor(weight, orderedRuns[i].hebrew)
-      doc.text(renderedTexts[i], cx, yPos)
-      cx += widths[i]
     }
   }
 
@@ -184,9 +149,10 @@ export async function generateInvoicePDFHebrew({ invoice, client, company, entri
     doc.setTextColor(...SLATE)
     for (const f of fields) {
       if (!f) continue
-      setFontFor('normal', hasHebrew(f))
-      // splitTextToSize must measure the ORIGINAL string (correct glyph
-      // widths), then textAuto handles per-run rendering for each wrapped line.
+      doc.setFont(hasHebrew(f) ? 'NotoHebrew' : 'helvetica', 'normal')
+      // splitTextToSize measures the ORIGINAL (logical-order) string for
+      // correct wrapping widths; textAuto then bidi-reorders each wrapped
+      // line individually before drawing.
       const lines = doc.splitTextToSize(f, halfW)
       lines.forEach(line => { textAuto(line, x, ay); ay += 13 })
     }

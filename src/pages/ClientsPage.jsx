@@ -268,7 +268,7 @@ export default function ClientsPage({ isAdmin = true }) {
       {confirmDelete && (
         <Modal title="Remove client?" onClose={() => setConfirmDelete(null)} width={400}>
           <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6 }}>
-            Permanently remove <strong>{confirmDelete.name}</strong>? Clients with existing entries or invoices cannot be removed.
+            Permanently remove <strong><bdi>{confirmDelete.name}</bdi></strong>? Clients with existing entries or invoices cannot be removed.
           </p>
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>

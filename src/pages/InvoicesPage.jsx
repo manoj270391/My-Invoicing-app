@@ -2,17 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { IconInvoice, IconDownload, IconCheck, IconEdit, IconTrash, IconAlert } from '../components/Icons'
-import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice } from '../lib/api'
+import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice, getAvailableFinancialYears, getFinancialYear } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { generateInvoicePDFHebrew } from '../lib/pdfInvoiceHebrew'
-import { formatCurrency, formatINR, buildInvoiceFilename, entriesContainRTL } from '../lib/gst'
+import { formatCurrency, formatINR, buildInvoiceFilename, entriesContainRTL, formatFinancialYearLabel, formatFinancialYearDateRange, getFinancialYearRange } from '../lib/gst'
 
 export default function InvoicesPage({ isAdmin }) {
   const [invoices, setInvoices] = useState(null)
   const [allEntries, setAllEntries] = useState([])
   const [statusFilter, setStatusFilter] = useState('all')
   const [monthFilter, setMonthFilter] = useState('')
-  const [yearFilter, setYearFilter] = useState('')
+  const [fyFilter, setFyFilter] = useState(getFinancialYear()) // '' = all financial years
+  const [availableFYs, setAvailableFYs] = useState(null)
   const [editingInv, setEditingInv] = useState(null)
   const [markingPaid, setMarkingPaid] = useState(null)
   const [inrAmount, setInrAmount] = useState('')
@@ -27,15 +28,15 @@ export default function InvoicesPage({ isAdmin }) {
     } catch (e) { toast(e.message, 'error') }
   }
   useEffect(() => { load() }, [])
-
-  const years = useMemo(() => Array.from(new Set((invoices || []).map(i => i.invoice_date?.slice(0, 4)))).filter(Boolean).sort().reverse(), [invoices])
+  useEffect(() => { getAvailableFinancialYears().then(setAvailableFYs).catch(e => toast(e.message, 'error')) }, [])
 
   const filtered = useMemo(() => {
     if (!invoices) return []
+    const fyRange = fyFilter !== '' ? getFinancialYearRange(fyFilter) : null
     return invoices.filter(i => {
       if (statusFilter !== 'all' && i.status !== statusFilter) return false
       if (monthFilter && !i.invoice_date?.startsWith(monthFilter)) return false
-      if (yearFilter  && !i.invoice_date?.startsWith(yearFilter))  return false
+      if (fyRange && (i.invoice_date < fyRange.start || i.invoice_date > fyRange.end)) return false
       return true
     })
   }, [invoices, statusFilter, monthFilter, yearFilter])
@@ -100,7 +101,7 @@ export default function InvoicesPage({ isAdmin }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {['all','unpaid','paid'].map(s => (
           <button key={s} className={`btn btn-sm ${statusFilter === s ? 'btn-secondary' : 'btn-ghost'}`}
             style={statusFilter === s ? { borderColor: 'var(--ink)' } : {}}
@@ -108,17 +109,22 @@ export default function InvoicesPage({ isAdmin }) {
             {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
-        <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
-          style={{ padding: '7px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, background: 'white' }}>
-          <option value="">All years</option>
-          {years.map(y => <option key={y} value={y}>{y}</option>)}
+        <select value={fyFilter} onChange={e => setFyFilter(e.target.value === '' ? '' : Number(e.target.value))}
+          style={{ padding: '7px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, background: 'white', fontWeight: 600 }}>
+          <option value="">All financial years</option>
+          {(availableFYs || [fyFilter]).map(fy => (
+            <option key={fy} value={fy}>{formatFinancialYearLabel(fy)}</option>
+          ))}
         </select>
         <input type="month" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}
           style={{ padding: '7px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13 }} />
-        {(statusFilter !== 'all' || monthFilter || yearFilter) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { setStatusFilter('all'); setMonthFilter(''); setYearFilter('') }}>Clear</button>
+        {(statusFilter !== 'all' || monthFilter || fyFilter !== '') && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setStatusFilter('all'); setMonthFilter(''); setFyFilter('') }}>Clear</button>
         )}
       </div>
+      {fyFilter !== '' && (
+        <div style={{ fontSize: 11.5, color: 'var(--slate-light)', marginBottom: 16 }}>{formatFinancialYearDateRange(fyFilter)}</div>
+      )}
 
       {invoices === null ? (
         <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="loading-spin" /></div>
