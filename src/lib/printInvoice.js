@@ -1,4 +1,4 @@
-import { formatPDF, lineTotal } from './gst'
+import { formatPDF, lineTotal, buildInvoiceFilename } from './gst'
 
 const NAVY = '#374961'
 const GOLD = '#C49A3D'
@@ -89,11 +89,16 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Invoice ${invoice.invoice_number}</title>
+  <title>${buildInvoiceFilename(invoice.invoice_number, client.name).replace(/\.pdf$/, '')}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      color-adjust: exact;
+    }
 
     body {
       font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
@@ -253,7 +258,7 @@ export function openPrintInvoice({ invoice, client, company, entries, templateTy
 </div>
 
 <div class="print-bar no-print">
-  <span>Review the invoice, then click Print to save as PDF — works perfectly with Hebrew and all languages.</span>
+  <span>Click Print → in "More settings" turn OFF "Headers and footers" → Save as PDF. Works perfectly with Hebrew and all languages.</span>
   <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
 </div>
 

@@ -63,14 +63,24 @@ export default function LedgerPage({ isAdmin = true }) {
   }, [entries, activeTab, filters, search])
 
   const stats = useMemo(() => {
-    if (!entries) return { pending: 0, invoiced: 0, paid: 0 }
+    if (!entries) return { pendingByCurrency: [], invoicedByCurrency: [], paidByCurrency: [], pendingCount: 0 }
     const byTab = entries.filter(e => e.entry_type === activeTab)
-    const sum = arr => arr.reduce((a, e) => a + (Number(e.line_total) || lineTotal(e)), 0)
+
+    function groupByCurrency(arr) {
+      const byCur = {}
+      arr.forEach(e => {
+        const cur = e.currency || 'INR'
+        byCur[cur] = (byCur[cur] || 0) + (Number(e.line_total) || lineTotal(e))
+      })
+      return Object.entries(byCur).sort((a, b) => b[1] - a[1])
+    }
+
+    const pendingEntries = byTab.filter(e => e.status === 'pending')
     return {
-      pending: sum(byTab.filter(e => e.status === 'pending')),
-      invoiced: sum(byTab.filter(e => e.status === 'invoiced')),
-      paid: sum(byTab.filter(e => e.status === 'paid')),
-      pendingCount: byTab.filter(e => e.status === 'pending').length,
+      pendingByCurrency: groupByCurrency(pendingEntries),
+      invoicedByCurrency: groupByCurrency(byTab.filter(e => e.status === 'invoiced')),
+      paidByCurrency: groupByCurrency(byTab.filter(e => e.status === 'paid')),
+      pendingCount: pendingEntries.length,
     }
   }, [entries, activeTab])
 
@@ -215,9 +225,30 @@ export default function LedgerPage({ isAdmin = true }) {
       )}
 
       <div className="stat-row" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
-        <div className="stat-tile"><div className="stat-label">Pending ({stats.pendingCount})</div><div className="stat-value amber">{formatINR(stats.pending)}</div></div>
-        <div className="stat-tile"><div className="stat-label">Invoiced, unpaid</div><div className="stat-value teal">{formatINR(stats.invoiced)}</div></div>
-        <div className="stat-tile"><div className="stat-label">Paid</div><div className="stat-value green">{formatINR(stats.paid)}</div></div>
+        <div className="stat-tile">
+          <div className="stat-label">Pending ({stats.pendingCount})</div>
+          {stats.pendingByCurrency.length === 0 ? (
+            <div className="stat-value amber">{formatCurrency(0, 'INR')}</div>
+          ) : stats.pendingByCurrency.map(([cur, amt]) => (
+            <div key={cur} className="stat-value amber" style={{ fontSize: stats.pendingByCurrency.length > 1 ? 16 : undefined }}>{formatCurrency(amt, cur)}</div>
+          ))}
+        </div>
+        <div className="stat-tile">
+          <div className="stat-label">Invoiced, unpaid</div>
+          {stats.invoicedByCurrency.length === 0 ? (
+            <div className="stat-value teal">{formatCurrency(0, 'INR')}</div>
+          ) : stats.invoicedByCurrency.map(([cur, amt]) => (
+            <div key={cur} className="stat-value teal" style={{ fontSize: stats.invoicedByCurrency.length > 1 ? 16 : undefined }}>{formatCurrency(amt, cur)}</div>
+          ))}
+        </div>
+        <div className="stat-tile">
+          <div className="stat-label">Paid</div>
+          {stats.paidByCurrency.length === 0 ? (
+            <div className="stat-value green">{formatCurrency(0, 'INR')}</div>
+          ) : stats.paidByCurrency.map(([cur, amt]) => (
+            <div key={cur} className="stat-value green" style={{ fontSize: stats.paidByCurrency.length > 1 ? 16 : undefined }}>{formatCurrency(amt, cur)}</div>
+          ))}
+        </div>
       </div>
 
       {/* Search & Filters */}
