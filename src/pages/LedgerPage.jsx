@@ -63,7 +63,7 @@ export default function LedgerPage({ isAdmin = true }) {
   }, [entries, activeTab, filters, search])
 
   const stats = useMemo(() => {
-    if (!entries) return { pendingByCurrency: [], invoicedByCurrency: [], paidByCurrency: [], pendingCount: 0 }
+    if (!entries) return { pendingByCurrency: [], invoicedByCurrency: [], paidByCurrency: [], pendingCount: 0, pendingByClient: [] }
     const byTab = entries.filter(e => e.entry_type === activeTab)
 
     function groupByCurrency(arr) {
@@ -76,11 +76,30 @@ export default function LedgerPage({ isAdmin = true }) {
     }
 
     const pendingEntries = byTab.filter(e => e.status === 'pending')
+
+    // Pending grouped by client — each client's amounts kept per-currency
+    // (a client could in principle have entries in more than one currency),
+    // sorted by whichever client has the largest pending amount first, since
+    // that's usually the one most "due" for an invoice.
+    const byClient = {}
+    pendingEntries.forEach(e => {
+      const name = e.clients?.name || 'Unknown'
+      const cur = e.currency || 'INR'
+      const amt = Number(e.line_total) || lineTotal(e)
+      if (!byClient[name]) byClient[name] = { name, count: 0, byCurrency: {} }
+      byClient[name].count += 1
+      byClient[name].byCurrency[cur] = (byClient[name].byCurrency[cur] || 0) + amt
+    })
+    const pendingByClient = Object.values(byClient)
+      .map(c => ({ ...c, currencies: Object.entries(c.byCurrency).sort((a, b) => b[1] - a[1]) }))
+      .sort((a, b) => (b.currencies[0]?.[1] || 0) - (a.currencies[0]?.[1] || 0))
+
     return {
       pendingByCurrency: groupByCurrency(pendingEntries),
       invoicedByCurrency: groupByCurrency(byTab.filter(e => e.status === 'invoiced')),
       paidByCurrency: groupByCurrency(byTab.filter(e => e.status === 'paid')),
       pendingCount: pendingEntries.length,
+      pendingByClient,
     }
   }, [entries, activeTab])
 
@@ -250,6 +269,34 @@ export default function LedgerPage({ isAdmin = true }) {
           ))}
         </div>
       </div>
+
+      {stats.pendingByClient.length > 0 && (
+        <div className="card card-pad" style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 12 }}>
+            Pending by client — click a client to filter the list below
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+            {stats.pendingByClient.map(c => (
+              <button
+                key={c.name}
+                onClick={() => setFilters(f => ({ ...f, clientId: tabClients.find(tc => tc.name === c.name)?.id || f.clientId }))}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                  padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)',
+                  background: 'var(--paper)', cursor: 'pointer', textAlign: 'left', width: '100%',
+                }}
+              >
+                <span style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 600 }}>
+                  {c.name} <span style={{ fontWeight: 400, color: 'var(--slate-light)', fontSize: 11.5 }}>({c.count} file{c.count !== 1 ? 's' : ''})</span>
+                </span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)' }}>
+                  {c.currencies.map(([cur, amt]) => formatCurrency(amt, cur)).join(' · ')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search & Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
