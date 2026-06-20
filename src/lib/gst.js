@@ -79,3 +79,22 @@ export function buildInvoiceFilename(invoiceNumber, clientName) {
   const safeClient = (clientName || 'Client').replace(/[^a-zA-Z0-9]+/g, '')
   return `Invoice_${safeNumber}_${safeClient}.pdf`
 }
+
+// Detects Hebrew/RTL characters anywhere in the entries or client name —
+// used to decide which PDF generator (standard vs Hebrew-capable) to use.
+const RTL_RE = /[\u0590-\u05FF\u0600-\u06FF\uFB1D-\uFDFD\uFE70-\uFEFF]/
+
+export function entriesContainRTL(entries, client) {
+  if (client?.name && RTL_RE.test(client.name)) return true
+  for (const e of entries || []) {
+    if (RTL_RE.test(e.file_name || '')) return true
+    if (RTL_RE.test(e.project_name || '')) return true
+    for (const item of e.service_items || []) {
+      if (RTL_RE.test(item.description || '')) return true
+    }
+    if (RTL_RE.test(e.website_renewal_desc || '')) return true
+    if (RTL_RE.test(e.google_subscription_desc || '')) return true
+    if (RTL_RE.test(e.other_desc || '')) return true
+  }
+  return false
+}

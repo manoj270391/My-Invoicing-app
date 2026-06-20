@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import Modal from './Modal'
 import { useToast } from './Toast'
-import { isTamilNaduGSTIN, calculateGST, formatCurrency, formatINR, lineTotal, buildInvoiceFilename } from '../lib/gst'
+import { isTamilNaduGSTIN, calculateGST, formatCurrency, formatINR, lineTotal, buildInvoiceFilename, entriesContainRTL } from '../lib/gst'
 import { getNextInvoiceNumber, createInvoice, markEntriesInvoiced, getCompanyProfile } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
-import { openPrintInvoice } from '../lib/printInvoice'
+import { generateInvoicePDFHebrew } from '../lib/pdfInvoiceHebrew'
 
 export default function GenerateInvoiceModal({ client, entries, onClose, onGenerated }) {
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -62,40 +62,18 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
         status: 'unpaid',
       })
       await markEntriesInvoiced(entries.map(e => e.id), invoice.id)
-      const pdf = await generateInvoicePDF({ invoice, client, company, entries, templateType })
+
+      // Auto-detect Hebrew/RTL content and use the Hebrew-capable generator
+      // transparently — both produce identical layout/styling either way.
+      const needsHebrew = entriesContainRTL(entries, client)
+      const pdf = needsHebrew
+        ? await generateInvoicePDFHebrew({ invoice, client, company, entries, templateType })
+        : await generateInvoicePDF({ invoice, client, company, entries, templateType })
+
       pdf.save(buildInvoiceFilename(invoiceNumber.trim(), client.name))
       toast(`Invoice ${invoiceNumber} generated`, 'success')
       onGenerated()
     } catch (e) { toast(e.message || 'Could not generate invoice', 'error') }
-    finally { setGenerating(false) }
-  }
-
-
-  async function handlePrint() {
-    if (!invoiceNumber.trim()) return toast('Invoice number is required', 'error')
-    setGenerating(true)
-    try {
-      const company = await getCompanyProfile()
-      // Create invoice record first (same as generate)
-      const invoice = await createInvoice({
-        invoice_number: invoiceNumber.trim(),
-        client_id: client.id,
-        invoice_date: invoiceDate,
-        subtotal,
-        cgst: gst.cgst,
-        sgst: gst.sgst,
-        igst: gst.igst,
-        total: gst.total,
-        currency,
-        is_tamil_nadu: isTN,
-        template_type: templateType,
-        status: 'unpaid',
-      })
-      await markEntriesInvoiced(entries.map(e => e.id), invoice.id)
-      openPrintInvoice({ invoice, client, company, entries, templateType })
-      toast(`Invoice ${invoiceNumber} created — print view opened`, 'success')
-      onGenerated()
-    } catch (e) { toast(e.message || 'Could not open print view', 'error') }
     finally { setGenerating(false) }
   }
 
@@ -181,14 +159,9 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
 
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={handlePrint} disabled={generating} title="Opens in browser — supports Hebrew and all languages">
-                🖨️ {generating ? 'Opening…' : 'Print view (Hebrew/multilingual)'}
-              </button>
-              <button className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
-                {generating ? 'Generating…' : 'Download PDF'}
-              </button>
-            </div>
+            <button className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
+              {generating ? 'Generating…' : 'Generate & Download PDF'}
+            </button>
           </div>
         </>
       )}

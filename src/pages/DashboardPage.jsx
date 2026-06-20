@@ -13,14 +13,14 @@ function StatTile({ label, value, sub, color }) {
   )
 }
 
-function BarChart({ data, valueKey, labelKey, color = 'var(--teal)' }) {
+function BarChart({ data, valueKey, labelKey, color = 'var(--teal)', topLabelFormatter }) {
   const max = Math.max(...data.map(d => d[valueKey]), 1)
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, padding: '0 4px' }}>
       {data.map((d, i) => (
         <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ fontSize: 10, color: 'var(--slate-light)', fontFamily: 'var(--font-data)' }}>
-            {formatINR(d[valueKey]).replace('₹', '').trim()}
+          <div style={{ fontSize: 10, color: 'var(--slate-light)', fontFamily: 'var(--font-data)', textAlign: 'center', lineHeight: 1.3 }}>
+            {topLabelFormatter ? topLabelFormatter(d) : formatINR(d[valueKey]).replace('₹', '').trim()}
           </div>
           <div style={{
             width: '100%', background: color, borderRadius: '4px 4px 0 0',
@@ -106,16 +106,45 @@ export default function DashboardPage() {
       if (m) m.total += v
     })
 
-    // By client (top 5) — INR value only (paid + unpaid-INR combined for a revenue view)
-    const byClient = {}
+    // By client (top 5) — INR value (paid INR-equivalent + unpaid-INR) drives
+    // the bar height; foreign-currency totals not yet convertible to INR are
+    // tracked separately and shown in brackets alongside the client name.
+    const byClientINR = {}
+    const byClientForeign = {} // { clientName: { USD: 500, EUR: 200 } }
     invoices.forEach(inv => {
       const name = inv.clients?.name || 'Unknown'
-      const v = inv.status === 'paid' ? paidInrValue(inv) : (!inv.currency || inv.currency === 'INR' ? inv.total : null)
-      if (v == null) return
-      byClient[name] = (byClient[name] || 0) + v
+      const isForeign = inv.currency && inv.currency !== 'INR'
+
+      if (!isForeign) {
+        const v = inv.status === 'paid' ? paidInrValue(inv) : inv.total
+        if (v != null) byClientINR[name] = (byClientINR[name] || 0) + v
+        return
+      }
+
+      // Foreign currency: if paid AND inr_equivalent entered, count toward INR bar.
+      // Otherwise (unpaid, or paid-but-not-yet-converted), show in brackets.
+      if (inv.status === 'paid' && inv.inr_equivalent != null) {
+        byClientINR[name] = (byClientINR[name] || 0) + inv.inr_equivalent
+      } else {
+        byClientForeign[name] = byClientForeign[name] || {}
+        byClientForeign[name][inv.currency] = (byClientForeign[name][inv.currency] || 0) + inv.total
+      }
     })
-    const topClients = Object.entries(byClient).sort((a, b) => b[1] - a[1]).slice(0, 5)
-      .map(([name, total]) => ({ name: name.length > 16 ? name.slice(0, 14) + '…' : name, total }))
+
+    const allClientNames = new Set([...Object.keys(byClientINR), ...Object.keys(byClientForeign)])
+    const topClients = Array.from(allClientNames)
+      .map(name => ({
+        name,
+        total: byClientINR[name] || 0,
+        foreign: byClientForeign[name] || {},
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+      .map(c => ({
+        ...c,
+        name: c.name.length > 16 ? c.name.slice(0, 14) + '…' : c.name,
+        fullName: c.name,
+      }))
 
     // By service type — grouped by currency (PDF clients are mostly
     // international/foreign currency, so forcing INR-only hid all their data)
@@ -201,8 +230,30 @@ export default function DashboardPage() {
           <BarChart data={derived.months} valueKey="total" labelKey="label" color="var(--teal)" />
         </div>
         <div className="card card-pad">
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by client (INR, all time)</div>
-          <BarChart data={derived.topClients} valueKey="total" labelKey="name" color="var(--amber)" />
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Revenue by client</div>
+          <BarChart
+            data={derived.topClients}
+            valueKey="total"
+            labelKey="name"
+            color="var(--amber)"
+            topLabelFormatter={(d) => {
+              const inrPart = formatINR(d.total).replace('₹', '').trim()
+              const foreignEntries = Object.entries(d.foreign || {})
+              if (foreignEntries.length === 0) return inrPart
+              const foreignPart = foreignEntries.map(([cur, amt]) => formatCurrency(amt, cur)).join(', ')
+              return (
+                <>
+                  {inrPart}
+                  <div style={{ fontSize: 9, color: 'var(--amber)', marginTop: 1 }}>({foreignPart})</div>
+                </>
+              )
+            }}
+          />
+          {derived.topClients.some(c => Object.keys(c.foreign || {}).length > 0) && (
+            <div style={{ fontSize: 11, color: 'var(--slate-light)', marginTop: 10 }}>
+              Bracketed amounts are foreign-currency invoices not yet converted to INR (enter the INR received when marking paid).
+            </div>
+          )}
         </div>
       </div>
 
