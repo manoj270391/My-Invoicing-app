@@ -312,13 +312,13 @@ export default function LedgerPage({ isAdmin = true }) {
                     </td>
                     <td className="mono" style={{ padding: '13px 14px', fontSize: 12.5, color: 'var(--slate)', whiteSpace: 'nowrap' }}>{e.entry_date}</td>
                     <td style={{ padding: '13px 14px', fontWeight: 600, fontSize: 13.5 }}>{e.clients?.name || '—'}</td>
-                    <td style={{ padding: '13px 14px', fontSize: 13, color: 'var(--ink-soft)', maxWidth: 280 }}>
+                    <td style={{ padding: '13px 14px', fontSize: 13, color: 'var(--ink-soft)', maxWidth: 280, direction: 'ltr', textAlign: 'left' }}>
                       {e.entry_type === 'pdf' ? (
-                        <span>{e.file_name} <span className="mono" style={{ color: 'var(--slate)', fontSize: 12 }}>· {e.pages}pg × {formatCurrency(e.rate_per_page, e.currency)}</span></span>
+                        <span><bdi>{e.file_name}</bdi> <span className="mono" style={{ color: 'var(--slate)', fontSize: 12 }}>· {e.pages}pg × {formatCurrency(e.rate_per_page, e.currency)}</span></span>
                       ) : (
-                        <span>{(e.service_items?.filter(i => i.description).map(i => i.description).join(', ')) ||
+                        <span><bdi>{(e.service_items?.filter(i => i.description).map(i => i.description).join(', ')) ||
                           ([e.website_renewal_desc, e.google_subscription_desc, e.other_desc].filter(Boolean).join(', ')) ||
-                          'Website & domain maintenance'}</span>
+                          'Website & domain maintenance'}</bdi></span>
                       )}
                     </td>
                     <td className="mono" style={{ padding: '13px 14px', fontSize: 12.5, color: 'var(--slate)' }}>{e.currency || 'INR'}</td>

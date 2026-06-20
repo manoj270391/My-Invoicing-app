@@ -132,7 +132,7 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
           <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8, marginBottom: 18 }}>
             {entries.map(e => (
               <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', fontSize: 12.5, borderBottom: '1px solid var(--line)' }}>
-                <span style={{ color: 'var(--slate)' }}>{e.entry_type === 'pdf' ? e.file_name : (e.service_items?.[0]?.description || e.website_renewal_desc || 'Maintenance')}</span>
+                <span style={{ color: 'var(--slate)' }}><bdi>{e.entry_type === 'pdf' ? e.file_name : (e.service_items?.[0]?.description || e.website_renewal_desc || 'Maintenance')}</bdi></span>
                 <span className="mono">{formatCurrency(Number(e.line_total) || lineTotal(e), currency)}</span>
               </div>
             ))}

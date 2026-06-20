@@ -107,8 +107,11 @@ export default function DashboardPage() {
     })
 
     // By client (top 5) — INR value (paid INR-equivalent + unpaid-INR) drives
-    // the bar height; foreign-currency totals not yet convertible to INR are
-    // tracked separately and shown in brackets alongside the client name.
+    // the bar height. Foreign-currency invoices ALSO always keep their original
+    // foreign total tracked separately, shown in brackets next to the INR
+    // figure — e.g. "₹50,000 (525 USD)" — even after an INR equivalent has
+    // been entered and the invoice marked paid, since the original foreign
+    // amount remains useful context.
     const byClientINR = {}
     const byClientForeign = {} // { clientName: { USD: 500, EUR: 200 } }
     invoices.forEach(inv => {
@@ -121,13 +124,14 @@ export default function DashboardPage() {
         return
       }
 
-      // Foreign currency: if paid AND inr_equivalent entered, count toward INR bar.
-      // Otherwise (unpaid, or paid-but-not-yet-converted), show in brackets.
+      // Foreign currency: always show the original foreign total in brackets.
+      byClientForeign[name] = byClientForeign[name] || {}
+      byClientForeign[name][inv.currency] = (byClientForeign[name][inv.currency] || 0) + inv.total
+
+      // If paid AND an INR equivalent has been entered, that INR amount also
+      // counts toward the INR bar height (so the chart reflects real revenue).
       if (inv.status === 'paid' && inv.inr_equivalent != null) {
         byClientINR[name] = (byClientINR[name] || 0) + inv.inr_equivalent
-      } else {
-        byClientForeign[name] = byClientForeign[name] || {}
-        byClientForeign[name][inv.currency] = (byClientForeign[name][inv.currency] || 0) + inv.total
       }
     })
 
@@ -251,7 +255,7 @@ export default function DashboardPage() {
           />
           {derived.topClients.some(c => Object.keys(c.foreign || {}).length > 0) && (
             <div style={{ fontSize: 11, color: 'var(--slate-light)', marginTop: 10 }}>
-              Bracketed amounts are foreign-currency invoices not yet converted to INR (enter the INR received when marking paid).
+              Bracketed amounts show the original foreign-currency invoice total for that client, alongside the INR figure (which includes any INR equivalent you've entered for paid invoices).
             </div>
           )}
         </div>
