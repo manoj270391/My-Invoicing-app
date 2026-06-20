@@ -29,6 +29,7 @@ export default function LedgerPage({ isAdmin = true }) {
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [forceDeleteTarget, setForceDeleteTarget] = useState(null)
   const [selected, setSelected] = useState(new Set())
+  const [lastClickedId, setLastClickedId] = useState(null)
   const [search, setSearch] = useState('')
   const [filters, setFilters] = useState({ clientId: '', status: '', month: '', year: '' })
   const toast = useToast()
@@ -196,8 +197,26 @@ export default function LedgerPage({ isAdmin = true }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
-  function toggleSelect(id) {
+  function toggleSelect(id, shiftKey) {
+    if (shiftKey && lastClickedId) {
+      // Range-select: select everything between lastClickedId and this id,
+      // within the currently visible (filtered, pending-only) rows.
+      const pendingVisible = filtered.filter(e => e.status === 'pending')
+      const lastIdx = pendingVisible.findIndex(e => e.id === lastClickedId)
+      const thisIdx = pendingVisible.findIndex(e => e.id === id)
+      if (lastIdx !== -1 && thisIdx !== -1) {
+        const [start, end] = lastIdx < thisIdx ? [lastIdx, thisIdx] : [thisIdx, lastIdx]
+        setSelected(s => {
+          const n = new Set(s)
+          for (let i = start; i <= end; i++) n.add(pendingVisible[i].id)
+          return n
+        })
+        setLastClickedId(id)
+        return
+      }
+    }
     setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setLastClickedId(id)
   }
 
   const selectedEntries = (entries || []).filter(e => selected.has(e.id))
@@ -273,27 +292,46 @@ export default function LedgerPage({ isAdmin = true }) {
       {stats.pendingByClient.length > 0 && (
         <div className="card card-pad" style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 12 }}>
-            Pending by client — click a client to filter the list below
+            Pending by client — click a name to filter, or "Select all" to tick every pending file for that client
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
-            {stats.pendingByClient.map(c => (
-              <button
-                key={c.name}
-                onClick={() => setFilters(f => ({ ...f, clientId: tabClients.find(tc => tc.name === c.name)?.id || f.clientId }))}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                  padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)',
-                  background: 'var(--paper)', cursor: 'pointer', textAlign: 'left', width: '100%',
-                }}
-              >
-                <span style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 600 }}>
-                  {c.name} <span style={{ fontWeight: 400, color: 'var(--slate-light)', fontSize: 11.5 }}>({c.count} file{c.count !== 1 ? 's' : ''})</span>
-                </span>
-                <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)' }}>
-                  {c.currencies.map(([cur, amt]) => formatCurrency(amt, cur)).join(' · ')}
-                </span>
-              </button>
-            ))}
+            {stats.pendingByClient.map(c => {
+              const clientObj = tabClients.find(tc => tc.name === c.name)
+              return (
+                <div
+                  key={c.name}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                    padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--paper)',
+                  }}
+                >
+                  <button
+                    onClick={() => setFilters(f => ({ ...f, clientId: clientObj?.id || f.clientId }))}
+                    style={{ display: 'flex', alignItems: 'baseline', gap: 8, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', flex: 1, minWidth: 0 }}
+                  >
+                    <span style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 600 }}>
+                      {c.name} <span style={{ fontWeight: 400, color: 'var(--slate-light)', fontSize: 11.5 }}>({c.count} file{c.count !== 1 ? 's' : ''})</span>
+                    </span>
+                  </button>
+                  <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', whiteSpace: 'nowrap' }}>
+                    {c.currencies.map(([cur, amt]) => formatCurrency(amt, cur)).join(' · ')}
+                  </span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ flexShrink: 0 }}
+                    onClick={() => {
+                      if (!clientObj) return
+                      const idsForClient = (entries || [])
+                        .filter(e => e.entry_type === activeTab && e.status === 'pending' && e.client_id === clientObj.id)
+                        .map(e => e.id)
+                      setSelected(s => new Set([...s, ...idsForClient]))
+                    }}
+                  >
+                    Select all
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -354,7 +392,13 @@ export default function LedgerPage({ isAdmin = true }) {
                   <tr key={e.id} style={{ borderBottom: '1px solid var(--line)' }}>
                     <td style={{ padding: '13px 14px' }}>
                       {e.status === 'pending' && (
-                        <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleSelect(e.id)} style={{ width: 16, height: 16, accentColor: 'var(--teal)' }} />
+                        <input
+                          type="checkbox"
+                          checked={selected.has(e.id)}
+                          onChange={() => {}}
+                          onClick={(ev) => toggleSelect(e.id, ev.shiftKey)}
+                          style={{ width: 16, height: 16, accentColor: 'var(--teal)' }}
+                        />
                       )}
                     </td>
                     <td className="mono" style={{ padding: '13px 14px', fontSize: 12.5, color: 'var(--slate)', whiteSpace: 'nowrap' }}>{e.entry_date}</td>
