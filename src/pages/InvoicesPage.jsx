@@ -43,9 +43,9 @@ export default function InvoicesPage({ isAdmin }) {
     })
   }, [invoices, statusFilter, monthFilter, fyFilter])
 
-  // Accountants can record/edit payments only for Website & Domain clients;
-  // PDF Accessibility client payments (often foreign currency, needing an
-  // INR-equivalent entry) remain admin-only.
+  // Accountants can record payments and void invoices only for Website &
+  // Domain clients; PDF Accessibility client invoices (often foreign
+  // currency, needing an INR-equivalent entry) remain admin-only for both.
   function canManagePayment(inv) {
     return isAdmin || inv.clients?.client_type === 'website'
   }
@@ -225,7 +225,7 @@ export default function InvoicesPage({ isAdmin }) {
                     <td style={{ padding: '13px 16px' }}>{statusBadge(inv.status)}</td>
                     <td style={{ padding: '13px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => redownload(inv)} title="Download PDF"><IconDownload width={14} /></button>
-                      {isAdmin && <button className="btn btn-ghost btn-sm" onClick={() => setVoidConfirm(inv)} title="Void invoice" style={{ color: 'var(--red)' }}><IconTrash width={14} /></button>}
+                      {canManagePayment(inv) && <button className="btn btn-ghost btn-sm" onClick={() => setVoidConfirm(inv)} title="Void invoice" style={{ color: 'var(--red)' }}><IconTrash width={14} /></button>}
                       {canManagePayment(inv) && (
                         <>
                           {inv.status === 'paid' ? (
