@@ -185,9 +185,40 @@ export async function updateInvoice(id, patch) {
   return data
 }
 
+// Records a payment against an invoice (full or partial) and recalculates
+// status automatically: amount_received >= total -> 'paid',
+// 0 < amount_received < total -> 'partially_paid', 0 -> 'unpaid'.
+export async function recordPayment(id, amountReceived, paymentDate, inrEquivalent) {
+  const { data: invoice, error: fetchErr } = await supabase.from('invoices').select('total').eq('id', id).single()
+  if (fetchErr) throw fetchErr
+
+  const received = Number(amountReceived) || 0
+  const status = received <= 0 ? 'unpaid' : received >= invoice.total ? 'paid' : 'partially_paid'
+
+  const patch = {
+    amount_received: received,
+    last_payment_date: paymentDate || new Date().toISOString().slice(0, 10),
+    status,
+  }
+  if (inrEquivalent != null) patch.inr_equivalent = inrEquivalent
+  return updateInvoice(id, patch)
+}
+
+// Marks an invoice fully paid in one step (used for the simple "Mark paid"
+// action where the full amount is being recorded, not a partial one).
 export async function updateInvoiceStatus(id, status, inrEquivalent) {
   const patch = { status }
   if (inrEquivalent != null) patch.inr_equivalent = inrEquivalent
+  if (status === 'paid') {
+    const { data: invoice, error: fetchErr } = await supabase.from('invoices').select('total').eq('id', id).single()
+    if (!fetchErr && invoice) {
+      patch.amount_received = invoice.total
+      patch.last_payment_date = new Date().toISOString().slice(0, 10)
+    }
+  } else if (status === 'unpaid') {
+    patch.amount_received = 0
+    patch.last_payment_date = null
+  }
   return updateInvoice(id, patch)
 }
 
@@ -256,7 +287,7 @@ export async function deleteRecurringTemplate(id) {
 
 // ── Dashboard analytics ───────────────────────────────────────
 export async function getDashboardStats(fyStartYear) {
-  let invQuery = supabase.from('invoices').select('total, status, currency, inr_equivalent, invoice_date, clients(name, client_type)')
+  let invQuery = supabase.from('invoices').select('total, status, currency, inr_equivalent, amount_received, last_payment_date, invoice_date, clients(name, client_type)')
   let entQuery = supabase.from('entries').select('line_total, status, entry_type, currency, entry_date, clients(name, client_type)')
 
   if (fyStartYear != null) {

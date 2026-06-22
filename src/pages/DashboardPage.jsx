@@ -34,12 +34,22 @@ function BarChart({ data, valueKey, labelKey, color = 'var(--teal)', topLabelFor
   )
 }
 
-// Returns the INR value of a paid invoice:
-// - INR invoices: use total directly
-// - Foreign currency invoices: use inr_equivalent if entered, else null (unconverted)
+// Returns the INR value actually RECEIVED for an invoice so far:
+// - INR invoices: amount_received directly (0 if unpaid, partial amount if
+//   partially paid, full total if paid)
+// - Foreign currency invoices: inr_equivalent if entered (the INR value of
+//   whatever has been received so far), else null (not yet converted)
 function paidInrValue(inv) {
-  if (inv.currency === 'INR' || !inv.currency) return inv.total
+  const received = Number(inv.amount_received) || 0
+  if (inv.currency === 'INR' || !inv.currency) return received
   return inv.inr_equivalent != null ? inv.inr_equivalent : null
+}
+
+// Returns the outstanding (still-pending) amount for an invoice in its own
+// currency: total minus whatever has been received so far. Never negative.
+function pendingValue(inv) {
+  const received = Number(inv.amount_received) || 0
+  return Math.max(inv.total - received, 0)
 }
 
 const FY_MONTH_LABELS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
@@ -65,42 +75,51 @@ export default function DashboardPage() {
     if (!stats) return null
     const { invoices, entries } = stats
 
-    const paidInvoices = invoices.filter(i => i.status === 'paid')
-    const unpaidInvoices = invoices.filter(i => i.status === 'unpaid')
+    // "Outstanding" now includes both fully unpaid AND partially paid
+    // invoices — partially paid still has a real pending balance owed.
+    const unpaidInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'partially_paid')
 
-    // Paid total — only counts INR value (real or converted). Foreign-currency
-    // invoices marked paid but without an INR equivalent entered are tracked
-    // separately so revenue figures never silently mix currencies.
+    // Paid total — sums whatever has actually been RECEIVED so far across
+    // every invoice (full payments count fully, partial payments count their
+    // partial amount). Only counts INR value (real or converted);
+    // foreign-currency invoices with a partial/full receipt but no INR
+    // equivalent entered yet are tracked separately so revenue figures never
+    // silently mix currencies.
     let paid = 0
     let unconvertedCount = 0
-    paidInvoices.forEach(inv => {
+    invoices.forEach(inv => {
+      if (inv.status === 'unpaid') return // nothing received yet
       const v = paidInrValue(inv)
       if (v == null) { unconvertedCount++; return }
       paid += v
     })
 
-    // Outstanding — only INR-denominated unpaid invoices count toward the
-    // INR "Outstanding" headline figure; foreign currency unpaid kept separate.
+    // Outstanding — only INR-denominated invoices count toward the INR
+    // "Outstanding" headline figure, using the PENDING balance (total minus
+    // whatever's been received), not the full original total; foreign
+    // currency outstanding kept separate.
     const unpaidINR = unpaidInvoices.filter(i => !i.currency || i.currency === 'INR')
     const unpaidForeign = unpaidInvoices.filter(i => i.currency && i.currency !== 'INR')
-    const unpaid = unpaidINR.reduce((s, i) => s + i.total, 0)
+    const unpaid = unpaidINR.reduce((s, i) => s + pendingValue(i), 0)
 
     const unpaidForeignByCurrency = {}
     unpaidForeign.forEach(i => {
-      unpaidForeignByCurrency[i.currency] = (unpaidForeignByCurrency[i.currency] || 0) + i.total
+      unpaidForeignByCurrency[i.currency] = (unpaidForeignByCurrency[i.currency] || 0) + pendingValue(i)
     })
 
-    // Outstanding by client — every unpaid invoice grouped under its client,
-    // with INR and any foreign-currency amounts shown side by side per client.
+    // Outstanding by client — every unpaid/partially-paid invoice grouped
+    // under its client, using each invoice's PENDING balance, with INR and
+    // any foreign-currency amounts shown side by side per client.
     const outstandingByClient = {}
     unpaidInvoices.forEach(inv => {
       const name = inv.clients?.name || 'Unknown'
       if (!outstandingByClient[name]) outstandingByClient[name] = { inr: 0, foreign: {} }
       const isForeign = inv.currency && inv.currency !== 'INR'
+      const pending = pendingValue(inv)
       if (isForeign) {
-        outstandingByClient[name].foreign[inv.currency] = (outstandingByClient[name].foreign[inv.currency] || 0) + inv.total
+        outstandingByClient[name].foreign[inv.currency] = (outstandingByClient[name].foreign[inv.currency] || 0) + pending
       } else {
-        outstandingByClient[name].inr += inv.total
+        outstandingByClient[name].inr += pending
       }
     })
     const outstandingClients = Object.entries(outstandingByClient)
@@ -135,7 +154,8 @@ export default function DashboardPage() {
       .map(([name, v]) => ({ name, ...v }))
       .sort((a, b) => b.inr - a.inr)
 
-    // Monthly revenue across the full financial year (Apr -> Mar), paid INR value only
+    // Monthly revenue across the full financial year (Apr -> Mar) — counts
+    // whatever's actually been received (full or partial payments), INR value only
     const months = FY_MONTH_LABELS.map((label, i) => {
       // i=0 -> April of selectedFY, i=9 -> January of selectedFY+1, etc.
       const calYear = i < 9 ? selectedFY : selectedFY + 1
@@ -143,7 +163,7 @@ export default function DashboardPage() {
       const key = `${calYear}-${String(calMonth).padStart(2, '0')}`
       return { key, label, total: 0 }
     })
-    paidInvoices.forEach(inv => {
+    invoices.filter(inv => inv.status !== 'unpaid').forEach(inv => {
       const v = paidInrValue(inv)
       if (v == null) return
       const m = months.find(mo => inv.invoice_date?.startsWith(mo.key))
@@ -159,7 +179,10 @@ export default function DashboardPage() {
       const isForeign = inv.currency && inv.currency !== 'INR'
 
       if (!isForeign) {
-        const v = inv.status === 'paid' ? paidInrValue(inv) : inv.total
+        // Paid/partially-paid: count what's actually been received.
+        // Unpaid: count the full billed total (this chart reflects revenue
+        // billed to each client, not strictly cash received).
+        const v = inv.status !== 'unpaid' ? paidInrValue(inv) : inv.total
         if (v != null) byClientINR[name] = (byClientINR[name] || 0) + v
         return
       }
@@ -167,7 +190,7 @@ export default function DashboardPage() {
       byClientForeign[name] = byClientForeign[name] || {}
       byClientForeign[name][inv.currency] = (byClientForeign[name][inv.currency] || 0) + inv.total
 
-      if (inv.status === 'paid' && inv.inr_equivalent != null) {
+      if (inv.status !== 'unpaid' && inv.inr_equivalent != null) {
         byClientINR[name] = (byClientINR[name] || 0) + inv.inr_equivalent
       }
     })
@@ -179,11 +202,12 @@ export default function DashboardPage() {
       .slice(0, 5)
       .map(c => ({ ...c, name: c.name.length > 16 ? c.name.slice(0, 14) + '…' : c.name, fullName: c.name }))
 
-    // Total INR actually RECEIVED (paid only) across all PDF Accessibility
-    // clients combined — INR invoices counted directly, foreign-currency
-    // invoices counted via their entered INR equivalent (if any).
+    // Total INR actually RECEIVED so far (full + partial payments) across
+    // all PDF Accessibility clients combined — INR invoices counted
+    // directly, foreign-currency invoices counted via their entered INR
+    // equivalent (if any).
     const pdfTotalReceivedINR = invoices
-      .filter(inv => inv.clients?.client_type === 'pdf' && inv.status === 'paid')
+      .filter(inv => inv.clients?.client_type === 'pdf' && inv.status !== 'unpaid')
       .reduce((sum, inv) => sum + (paidInrValue(inv) || 0), 0)
 
     // By service type — grouped by currency

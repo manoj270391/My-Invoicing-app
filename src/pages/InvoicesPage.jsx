@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { IconInvoice, IconDownload, IconCheck, IconEdit, IconTrash, IconAlert } from '../components/Icons'
-import { getInvoices, updateInvoice, updateInvoiceStatus, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice, getAvailableFinancialYears, getFinancialYear } from '../lib/api'
+import { getInvoices, updateInvoice, recordPayment, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice, getAvailableFinancialYears, getFinancialYear } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { generateInvoicePDFHebrew } from '../lib/pdfInvoiceHebrew'
 import { formatCurrency, formatINR, buildInvoiceFilename, entriesContainRTL, formatFinancialYearLabel, formatFinancialYearDateRange, getFinancialYearRange } from '../lib/gst'
@@ -15,7 +15,9 @@ export default function InvoicesPage({ isAdmin }) {
   const [fyFilter, setFyFilter] = useState(getFinancialYear()) // '' = all financial years
   const [availableFYs, setAvailableFYs] = useState(null)
   const [editingInv, setEditingInv] = useState(null)
-  const [markingPaid, setMarkingPaid] = useState(null)
+  const [paymentModal, setPaymentModal] = useState(null) // invoice being paid against
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState('')
   const [inrAmount, setInrAmount] = useState('')
   const [voidConfirm, setVoidConfirm] = useState(null)
   const toast = useToast()
@@ -41,24 +43,48 @@ export default function InvoicesPage({ isAdmin }) {
     })
   }, [invoices, statusFilter, monthFilter, fyFilter])
 
-  async function handleMarkPaid(invoice) {
-    const isForeign = invoice.currency !== 'INR'
-    if (isForeign && isAdmin) { setMarkingPaid(invoice); setInrAmount(''); return }
+  // Accountants can record/edit payments only for Website & Domain clients;
+  // PDF Accessibility client payments (often foreign currency, needing an
+  // INR-equivalent entry) remain admin-only.
+  function canManagePayment(inv) {
+    return isAdmin || inv.clients?.client_type === 'website'
+  }
+
+  function openPaymentModal(invoice) {
+    setPaymentModal(invoice)
+    setPaymentAmount(invoice.amount_received > 0 ? String(invoice.amount_received) : String(invoice.total))
+    setPaymentDate(invoice.last_payment_date || new Date().toISOString().slice(0, 10))
+    setInrAmount(invoice.inr_equivalent ? String(invoice.inr_equivalent) : '')
+  }
+
+  async function confirmPayment() {
+    if (!paymentModal) return
     try {
-      await updateInvoiceStatus(invoice.id, invoice.status === 'paid' ? 'unpaid' : 'paid')
-      const relatedIds = allEntries.filter(e => e.invoice_id === invoice.id).map(e => e.id)
-      if (relatedIds.length) await markEntriesPaid(relatedIds)
-      toast(invoice.status === 'paid' ? 'Marked as unpaid' : 'Marked as paid', 'success')
+      const isForeign = paymentModal.currency !== 'INR'
+      await recordPayment(
+        paymentModal.id,
+        paymentAmount,
+        paymentDate,
+        isForeign && inrAmount ? Number(inrAmount) : null
+      )
+      const received = Number(paymentAmount) || 0
+      // Only mark linked ledger entries as paid once the invoice is fully settled
+      if (received >= paymentModal.total) {
+        const relatedIds = allEntries.filter(e => e.invoice_id === paymentModal.id).map(e => e.id)
+        if (relatedIds.length) await markEntriesPaid(relatedIds)
+      }
+      const status = received <= 0 ? 'unpaid' : received >= paymentModal.total ? 'paid' : 'partially paid'
+      toast(`Invoice marked ${status}`, 'success')
+      setPaymentModal(null)
       load()
     } catch (e) { toast(e.message, 'error') }
   }
 
-  async function confirmMarkPaid() {
+  async function markUnpaid(invoice) {
     try {
-      await updateInvoiceStatus(markingPaid.id, 'paid', inrAmount ? Number(inrAmount) : null)
-      const relatedIds = allEntries.filter(e => e.invoice_id === markingPaid.id).map(e => e.id)
-      if (relatedIds.length) await markEntriesPaid(relatedIds)
-      toast('Marked as paid', 'success'); setMarkingPaid(null); load()
+      await recordPayment(invoice.id, 0, null, null)
+      toast('Marked as unpaid', 'success')
+      load()
     } catch (e) { toast(e.message, 'error') }
   }
 
@@ -74,7 +100,6 @@ export default function InvoicesPage({ isAdmin }) {
       pdf.save(buildInvoiceFilename(invoice.invoice_number, invoice.clients?.name))
     } catch { toast('Could not regenerate PDF', 'error') }
   }
-
 
   async function handleVoid() {
     try {
@@ -92,21 +117,27 @@ export default function InvoicesPage({ isAdmin }) {
     } catch (e) { toast(e.message, 'error') }
   }
 
+  const statusBadge = (status) => {
+    if (status === 'paid') return <span className="badge badge-paid">Paid</span>
+    if (status === 'partially_paid') return <span className="badge" style={{ background: 'var(--amber-soft)', color: 'var(--amber)' }}>Partially paid</span>
+    return <span className="badge badge-pending">Unpaid</span>
+  }
+
   return (
     <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Invoices</h1>
-          <p className="page-subtitle">Track invoiced work, mark payments, and download PDFs.</p>
+          <p className="page-subtitle">Track invoiced work, record payments, and download PDFs.</p>
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {['all','unpaid','paid'].map(s => (
+        {['all','unpaid','partially_paid','paid'].map(s => (
           <button key={s} className={`btn btn-sm ${statusFilter === s ? 'btn-secondary' : 'btn-ghost'}`}
             style={statusFilter === s ? { borderColor: 'var(--ink)' } : {}}
             onClick={() => setStatusFilter(s)}>
-            {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            {s === 'all' ? 'All' : s === 'partially_paid' ? 'Partially paid' : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
         <select value={fyFilter} onChange={e => setFyFilter(e.target.value === '' ? '' : Number(e.target.value))}
@@ -139,55 +170,79 @@ export default function InvoicesPage({ isAdmin }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                {['Invoice #','Client','Date','Type','Currency','Total','Status',''].map(h => (
-                  <th key={h} style={{ textAlign: h==='Total' ? 'right' : 'left', padding: '12px 16px', fontSize: 11.5, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                {['Invoice #','Client','Date','Type','Currency','Total','Pending','Status',''].map(h => (
+                  <th key={h} style={{ textAlign: (h==='Total' || h==='Pending') ? 'right' : 'left', padding: '12px 16px', fontSize: 11.5, fontWeight: 700, color: 'var(--slate)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map(inv => (
-                <tr key={inv.id} style={{ borderBottom: '1px solid var(--line)' }}>
-                  <td className="mono" style={{ padding: '13px 16px', fontWeight: 600 }}>
-                    {inv.invoice_number}
-                    {isAdmin && (
-                      <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={() => setEditingInv({ ...inv })}><IconEdit width={12} /></button>
-                    )}
-                  </td>
-                  <td style={{ padding: '13px 16px', fontSize: 13.5 }}>{inv.clients?.name}</td>
-                  <td className="mono" style={{ padding: '13px 16px', fontSize: 12.5, color: 'var(--slate)' }}>
-                    {inv.invoice_date}
-                    <div style={{ fontSize: 11, color: 'var(--slate-light)' }}>
-                      {inv.invoice_date?.slice(0, 7)}
-                    </div>
-                  </td>
-                  <td style={{ padding: '13px 16px', fontSize: 12.5 }}>
-                    <span className={`badge ${inv.template_type === 'lut' ? 'badge-invoiced' : 'badge-pending'}`}>
-                      {inv.template_type === 'lut' ? 'LUT' : inv.is_tamil_nadu ? 'CGST+SGST' : 'IGST'}
-                    </span>
-                  </td>
-                  <td className="mono" style={{ padding: '13px 16px', fontSize: 12.5 }}>{inv.currency || 'INR'}</td>
-                  <td className="mono" style={{ padding: '13px 16px', textAlign: 'right', fontWeight: 700 }}>
-                    {formatCurrency(inv.total, inv.currency)}
-                    {inv.inr_equivalent && inv.currency !== 'INR' && (
-                      <div style={{ fontSize: 11, color: 'var(--slate-light)', fontWeight: 400 }}>≈ {formatINR(inv.inr_equivalent)} received</div>
-                    )}
-                  </td>
-                  <td style={{ padding: '13px 16px' }}>
-                    <span className={`badge ${inv.status === 'paid' ? 'badge-paid' : 'badge-pending'}`}>
-                      {inv.status === 'paid' ? 'Paid' : 'Unpaid'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '13px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => redownload(inv)} title="Download PDF"><IconDownload width={14} /></button>
-                    {isAdmin && <button className="btn btn-ghost btn-sm" onClick={() => setVoidConfirm(inv)} title="Void invoice" style={{ color: 'var(--red)' }}><IconTrash width={14} /></button>}
-                    {(isAdmin || inv.clients?.client_type === 'website') && (
-                      <button className={`btn btn-sm ${inv.status === 'paid' ? 'btn-secondary' : 'btn-primary'}`} onClick={() => handleMarkPaid(inv)}>
-                        <IconCheck width={13} /> {inv.status === 'paid' ? 'Unpaid' : 'Mark paid'}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {filtered.map(inv => {
+                const received = Number(inv.amount_received) || 0
+                const pending = Math.max(inv.total - received, 0)
+                return (
+                  <tr key={inv.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                    <td className="mono" style={{ padding: '13px 16px', fontWeight: 600 }}>
+                      {inv.invoice_number}
+                      {isAdmin && (
+                        <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={() => setEditingInv({ ...inv })}><IconEdit width={12} /></button>
+                      )}
+                    </td>
+                    <td style={{ padding: '13px 16px', fontSize: 13.5 }}>{inv.clients?.name}</td>
+                    <td className="mono" style={{ padding: '13px 16px', fontSize: 12.5, color: 'var(--slate)' }}>
+                      {inv.invoice_date}
+                      <div style={{ fontSize: 11, color: 'var(--slate-light)' }}>
+                        {inv.invoice_date?.slice(0, 7)}
+                      </div>
+                    </td>
+                    <td style={{ padding: '13px 16px', fontSize: 12.5 }}>
+                      <span className={`badge ${inv.template_type === 'lut' ? 'badge-invoiced' : 'badge-pending'}`}>
+                        {inv.template_type === 'lut' ? 'LUT' : inv.is_tamil_nadu ? 'CGST+SGST' : 'IGST'}
+                      </span>
+                    </td>
+                    <td className="mono" style={{ padding: '13px 16px', fontSize: 12.5 }}>{inv.currency || 'INR'}</td>
+                    <td className="mono" style={{ padding: '13px 16px', textAlign: 'right', fontWeight: 700 }}>
+                      {formatCurrency(inv.total, inv.currency)}
+                      {inv.inr_equivalent && inv.currency !== 'INR' && (
+                        <div style={{ fontSize: 11, color: 'var(--slate-light)', fontWeight: 400 }}>≈ {formatINR(inv.inr_equivalent)} received</div>
+                      )}
+                    </td>
+                    <td className="mono" style={{ padding: '13px 16px', textAlign: 'right' }}>
+                      {inv.status === 'paid' ? (
+                        <span style={{ color: 'var(--slate-light)' }}>—</span>
+                      ) : (
+                        <>
+                          <span style={{ fontWeight: 700, color: inv.status === 'partially_paid' ? 'var(--amber)' : 'var(--ink-soft)' }}>
+                            {formatCurrency(pending, inv.currency)}
+                          </span>
+                          {received > 0 && (
+                            <div style={{ fontSize: 11, color: 'var(--slate-light)', fontWeight: 400 }}>
+                              {formatCurrency(received, inv.currency)} received{inv.last_payment_date ? ` on ${inv.last_payment_date}` : ''}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td style={{ padding: '13px 16px' }}>{statusBadge(inv.status)}</td>
+                    <td style={{ padding: '13px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => redownload(inv)} title="Download PDF"><IconDownload width={14} /></button>
+                      {isAdmin && <button className="btn btn-ghost btn-sm" onClick={() => setVoidConfirm(inv)} title="Void invoice" style={{ color: 'var(--red)' }}><IconTrash width={14} /></button>}
+                      {canManagePayment(inv) && (
+                        <>
+                          {inv.status === 'paid' ? (
+                            <button className="btn btn-secondary btn-sm" onClick={() => markUnpaid(inv)}>
+                              <IconCheck width={13} /> Unpaid
+                            </button>
+                          ) : (
+                            <button className="btn btn-primary btn-sm" onClick={() => openPaymentModal(inv)}>
+                              <IconCheck width={13} /> {inv.status === 'partially_paid' ? 'Update payment' : 'Record payment'}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -207,19 +262,50 @@ export default function InvoicesPage({ isAdmin }) {
         </Modal>
       )}
 
-      {/* Mark foreign currency invoice as paid */}
-      {markingPaid && (
-        <Modal title="Mark as paid — foreign currency" onClose={() => setMarkingPaid(null)} width={420}>
-          <p style={{ fontSize: 13.5, color: 'var(--slate)', lineHeight: 1.6, margin: '0 0 16px' }}>
-            This invoice was issued in <strong>{markingPaid.currency}</strong> for <strong>{formatCurrency(markingPaid.total, markingPaid.currency)}</strong>. Enter the INR amount you actually received (for your records).
-          </p>
-          <div className="field">
-            <label>Amount received in INR <span className="field-hint">(optional — for accounting reference)</span></label>
-            <input type="number" min="0" step="0.01" value={inrAmount} onChange={e => setInrAmount(e.target.value)} placeholder="0.00" className="mono" />
+      {/* Record / update payment */}
+      {paymentModal && (
+        <Modal title="Record payment" onClose={() => setPaymentModal(null)} width={440}>
+          <div style={{ background: 'var(--paper)', padding: '10px 14px', borderRadius: 8, marginBottom: 18 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate)' }}>Invoice total</div>
+            <strong style={{ fontSize: 15 }}>{formatCurrency(paymentModal.total, paymentModal.currency)}</strong>
+            {paymentModal.currency !== 'INR' && (
+              <div style={{ fontSize: 11.5, color: 'var(--slate-light)', marginTop: 2 }}>Issued in {paymentModal.currency}</div>
+            )}
           </div>
+
+          <div className="field-row">
+            <div className="field">
+              <label>Amount received</label>
+              <input
+                type="number" min="0" step="0.01" className="mono"
+                value={paymentAmount}
+                onChange={e => setPaymentAmount(e.target.value)}
+                placeholder="0.00"
+              />
+              <span className="field-hint">
+                {Number(paymentAmount) > 0 && Number(paymentAmount) < paymentModal.total
+                  ? `Partial — ${formatCurrency(paymentModal.total - Number(paymentAmount), paymentModal.currency)} will remain pending`
+                  : Number(paymentAmount) >= paymentModal.total
+                  ? 'Full amount — invoice will be marked Paid'
+                  : ''}
+              </span>
+            </div>
+            <div className="field">
+              <label>Date received</label>
+              <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} />
+            </div>
+          </div>
+
+          {paymentModal.currency !== 'INR' && (
+            <div className="field">
+              <label>Equivalent received in INR <span className="field-hint">(optional — for accounting reference)</span></label>
+              <input type="number" min="0" step="0.01" value={inrAmount} onChange={e => setInrAmount(e.target.value)} placeholder="0.00" className="mono" />
+            </div>
+          )}
+
           <div className="form-actions">
-            <button className="btn btn-secondary" onClick={() => setMarkingPaid(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={confirmMarkPaid}>Mark as paid</button>
+            <button className="btn btn-secondary" onClick={() => setPaymentModal(null)}>Cancel</button>
+            <button className="btn btn-primary" onClick={confirmPayment}>Save payment</button>
           </div>
         </Modal>
       )}
