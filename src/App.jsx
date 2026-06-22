@@ -8,7 +8,7 @@ import { signOut } from './lib/auth'
 import {
   IconDashboard, IconLedger, IconClients, IconInvoice,
   IconRepeat, IconExport, IconFolder, IconSettings,
-  IconUsers, IconHistory, IconLogout, IconBell, IconLock,
+  IconUsers, IconHistory, IconLogout, IconBell, IconLock, IconUpload,
 } from './components/Icons'
 import SetupNotice from './components/SetupNotice'
 import LoginPage from './pages/LoginPage'
@@ -21,6 +21,7 @@ import ExportPage from './pages/ExportPage'
 import SettingsPage from './pages/SettingsPage'
 import UsersPage from './pages/UsersPage'
 import AuditPage from './pages/AuditPage'
+import ImportClientsPage from './pages/ImportClientsPage'
 
 function NavItem({ id, label, icon: Icon, active, onClick, badge }) {
   return (
@@ -61,6 +62,7 @@ function AppShell({ dueSoon }) {
     { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
     { id: 'ledger',    label: 'Ledger',    icon: IconLedger },
     { id: 'clients',   label: 'Clients',   icon: IconClients },
+    { id: 'import',    label: 'Import Clients', icon: IconUpload },
     { id: 'invoices',  label: 'Invoices',  icon: IconInvoice },
     { id: 'recurring', label: 'Recurring', icon: IconRepeat, badge: dueSoon > 0 ? dueSoon : null },
     { id: 'export',    label: 'Export',    icon: IconExport },
@@ -107,6 +109,7 @@ function AppShell({ dueSoon }) {
         {page === 'dashboard' && isAdmin && <DashboardPage />}
         {page === 'ledger'    && <LedgerPage isAdmin={isAdmin} />}
         {page === 'clients'   && <ClientsPage isAdmin={isAdmin} />}
+        {page === 'import'    && isAdmin && <ImportClientsPage />}
         {page === 'invoices'  && <InvoicesPage isAdmin={isAdmin} />}
         {page === 'recurring' && <RecurringPage />}
         {page === 'export'    && isAdmin && <ExportPage />}
