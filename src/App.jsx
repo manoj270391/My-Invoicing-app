@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './app-shell.css'
 import './forms.css'
 import { AuthProvider, useAuth } from './lib/AuthContext'
@@ -39,9 +39,23 @@ function NavItem({ id, label, icon: Icon, active, onClick, badge }) {
 
 function AppShell({ dueSoon }) {
   const { session, role, isAdmin } = useAuth()
-  const [page, setPage] = useState('dashboard')
+  const [page, setPage] = useState(null) // null until we know the role, to avoid landing on the wrong default
+
+  useEffect(() => {
+    if (role && page === null) {
+      setPage(role === 'admin' ? 'dashboard' : 'ledger')
+    }
+  }, [role, page])
 
   if (!session) return <LoginPage />
+
+  if (!role || page === null) {
+    return (
+      <div className="center-screen">
+        <div className="loading-spin" />
+      </div>
+    )
+  }
 
   const adminNav = [
     { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },

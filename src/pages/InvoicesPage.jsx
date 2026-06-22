@@ -23,7 +23,7 @@ export default function InvoicesPage({ isAdmin }) {
   async function load() {
     try {
       const [inv, entries] = await Promise.all([getInvoices(), getEntries()])
-      setInvoices(isAdmin ? inv : inv.filter(i => i.clients?.client_type === 'website'))
+      setInvoices(inv)
       setAllEntries(entries)
     } catch (e) { toast(e.message, 'error') }
   }
