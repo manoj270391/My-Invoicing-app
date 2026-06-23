@@ -23,7 +23,18 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
         const num = await getNextInvoiceNumber(invoiceDate)
         setInvoiceNumber(num)
         const tn = isTamilNaduGSTIN(client.gstin)
-        setIsTN(tn === null ? true : tn)
+        if (tn !== null) {
+          // GSTIN present — derive directly from its prefix (33 = Tamil Nadu).
+          setIsTN(tn)
+        } else if (client.gst_type_override === 'cgst_sgst') {
+          // No GSTIN, but this client was explicitly marked as Tamil Nadu
+          // at the time they were added (mandatory choice for Website clients).
+          setIsTN(true)
+        } else {
+          // No GSTIN, explicitly marked as another state (or PDF client
+          // with no override recorded) — default to IGST.
+          setIsTN(false)
+        }
       } catch (e) { toast(e.message, 'error') }
       finally { setLoading(false) }
     }
@@ -123,7 +134,11 @@ export default function GenerateInvoiceModal({ client, entries, onClose, onGener
                 <button className={`radio-tab ${!isTN ? 'selected' : ''}`} onClick={() => setIsTN(false)}>IGST (other states)</button>
               </div>
               <span className="field-hint" style={{ marginTop: 6, display: 'block' }}>
-                {client.gstin ? 'Auto-detected from GSTIN.' : 'No GSTIN on file — please confirm.'}
+                {client.gstin
+                  ? 'Auto-detected from GSTIN.'
+                  : client.gst_type_override
+                    ? "No GSTIN on file — using this client's recorded tax type (set when they were added). Change below if needed."
+                    : 'No GSTIN on file and no tax type recorded for this client — defaulting to IGST. Please confirm.'}
               </span>
             </div>
           )}

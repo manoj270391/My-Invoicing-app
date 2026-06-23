@@ -15,6 +15,7 @@ const EMPTY = {
   name: '', client_type: 'pdf', is_international: false,
   address: '', email: '', phone: '',
   gstin: '', pan: '', vat_number: '', tax_id: '', business_reg: '',
+  gst_type_override: '',
   currency: 'INR',
 }
 
@@ -49,6 +50,9 @@ export default function ClientsPage({ isAdmin = true }) {
   async function save() {
     try {
       if (!editing.name.trim()) return toast('Client name is required', 'error')
+      if (editing.client_type === 'website' && !editing.gstin.trim() && !editing.gst_type_override) {
+        return toast('Please select CGST+SGST or IGST for this client, since no GSTIN is on file', 'error')
+      }
       if (editing.id) { await updateClient(editing.id, editing); toast('Client updated', 'success') }
       else { await createClient(editing); toast('Client added', 'success') }
       setEditing(null); load()
@@ -191,13 +195,31 @@ export default function ClientsPage({ isAdmin = true }) {
           <div className="field-row">
             <div className="field">
               <label>GSTIN <span className="field-hint">(leave blank if international)</span></label>
-              <input className="mono" value={editing.gstin} onChange={e => setEditing({ ...editing, gstin: e.target.value.toUpperCase() })} placeholder="33ABCDE1234F1Z5" maxLength={15} />
+              <input className="mono" value={editing.gstin} onChange={e => setEditing({ ...editing, gstin: e.target.value.toUpperCase(), gst_type_override: e.target.value.trim() ? '' : editing.gst_type_override })} placeholder="33ABCDE1234F1Z5" maxLength={15} />
             </div>
             <div className="field">
               <label>PAN</label>
               <input className="mono" value={editing.pan} onChange={e => setEditing({ ...editing, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" maxLength={10} />
             </div>
           </div>
+
+          {editing.client_type === 'website' && !editing.gstin.trim() && (
+            <div className="field" style={{ background: 'var(--amber-soft)', padding: '12px 14px', borderRadius: 8, marginBottom: 16 }}>
+              <label style={{ color: 'var(--amber)' }}>Tax type <span className="field-hint" style={{ color: 'var(--amber)' }}>(required — no GSTIN on file)</span></label>
+              <div className="radio-tabs" style={{ marginBottom: 0, marginTop: 6 }}>
+                <button type="button" className={`radio-tab ${editing.gst_type_override === 'cgst_sgst' ? 'selected' : ''}`} onClick={() => setEditing({ ...editing, gst_type_override: 'cgst_sgst' })}>
+                  CGST + SGST (Tamil Nadu)
+                </button>
+                <button type="button" className={`radio-tab ${editing.gst_type_override === 'igst' ? 'selected' : ''}`} onClick={() => setEditing({ ...editing, gst_type_override: 'igst' })}>
+                  IGST (Other state)
+                </button>
+              </div>
+              <p className="field-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+                Choose based on where this client is actually located — Tamil Nadu clients get CGST+SGST, all other states get IGST, regardless of whether they have a GST number.
+              </p>
+            </div>
+          )}
+
           <div className="field-row">
             <div className="field">
               <label>VAT Number</label>
