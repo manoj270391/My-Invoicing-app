@@ -3,16 +3,23 @@ import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
 import { IconRepeat, IconPlus, IconEdit, IconTrash, IconBell } from '../components/Icons'
 import { getRecurringTemplates, createRecurringTemplate, updateRecurringTemplate, deleteRecurringTemplate, getClients, createEntry } from '../lib/api'
-import { CURRENCIES, formatCurrency } from '../lib/gst'
+import { CURRENCIES, formatCurrency, todayIST } from '../lib/gst'
 
 const FREQS = ['monthly', 'quarterly', 'annual']
 
 function nextDueDate(freq) {
-  const d = new Date()
-  if (freq === 'monthly')   d.setMonth(d.getMonth() + 1)
-  if (freq === 'quarterly') d.setMonth(d.getMonth() + 3)
-  if (freq === 'annual')    d.setFullYear(d.getFullYear() + 1)
-  return d.toISOString().slice(0, 10)
+  // Start from today's IST date (not the browser's raw local time, which
+  // could be in a different timezone), then add the interval and format
+  // without any further UTC conversion.
+  const [y, m, d] = todayIST().split('-').map(Number)
+  const date = new Date(y, m - 1, d) // local-safe construction, no TZ shift
+  if (freq === 'monthly')   date.setMonth(date.getMonth() + 1)
+  if (freq === 'quarterly') date.setMonth(date.getMonth() + 3)
+  if (freq === 'annual')    date.setFullYear(date.getFullYear() + 1)
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 function isDueSoon(dateStr) {
@@ -63,7 +70,7 @@ export default function RecurringPage() {
       await createEntry({
         client_id: tmpl.client_id,
         entry_type: 'website',
-        entry_date: new Date().toISOString().slice(0, 10),
+        entry_date: todayIST(),
         currency: tmpl.currency,
         service_items: tmpl.service_items,
         line_total: total,
@@ -71,7 +78,7 @@ export default function RecurringPage() {
       })
       // Advance next due date
       await updateRecurringTemplate(tmpl.id, {
-        last_generated: new Date().toISOString().slice(0, 10),
+        last_generated: todayIST(),
         next_due_date: nextDueDate(tmpl.frequency),
       })
       toast('Ledger entry created from recurring template', 'success')

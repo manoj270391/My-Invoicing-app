@@ -124,3 +124,20 @@ export function formatFinancialYearDateRange(fyStartYear) {
   const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
   return `${fmt(start)} – ${fmt(end)}`
 }
+
+// Returns today's date as YYYY-MM-DD in IST (India Standard Time, UTC+5:30),
+// regardless of the browser/server's local timezone. Using new Date()
+// directly and slicing toISOString() (UTC) caused the date to roll over a
+// day early for anyone using the app late at night IST, since UTC is 5.5
+// hours behind — e.g. at 1:00 AM IST on the 24th, UTC clock still reads the
+// 23rd. This app's dates are business dates in India, so they should always
+// reflect IST regardless of where the browser happens to be.
+export function todayIST() {
+  const now = new Date()
+  // Shift the UTC timestamp forward by IST's offset, then read the
+  // calendar date as if it were UTC (so no further timezone conversion
+  // happens when formatting).
+  const istMs = now.getTime() + (5 * 60 + 30) * 60 * 1000
+  const ist = new Date(istMs)
+  return ist.toISOString().slice(0, 10)
+}

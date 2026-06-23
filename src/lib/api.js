@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { todayIST } from './gst'
 
 // ── Audit logging ─────────────────────────────────────────────
 export async function auditLog(action, tableName, recordId, oldData, newData) {
@@ -197,7 +198,7 @@ export async function recordPayment(id, amountReceived, paymentDate, inrEquivale
 
   const patch = {
     amount_received: received,
-    last_payment_date: paymentDate || new Date().toISOString().slice(0, 10),
+    last_payment_date: paymentDate || todayIST(),
     status,
   }
   if (inrEquivalent != null) patch.inr_equivalent = inrEquivalent
@@ -213,7 +214,7 @@ export async function updateInvoiceStatus(id, status, inrEquivalent) {
     const { data: invoice, error: fetchErr } = await supabase.from('invoices').select('total').eq('id', id).single()
     if (!fetchErr && invoice) {
       patch.amount_received = invoice.total
-      patch.last_payment_date = new Date().toISOString().slice(0, 10)
+      patch.last_payment_date = todayIST()
     }
   } else if (status === 'unpaid') {
     patch.amount_received = 0
@@ -224,11 +225,14 @@ export async function updateInvoiceStatus(id, status, inrEquivalent) {
 
 // Indian financial year: April 1 to March 31.
 // FY label = the calendar year in which the FY *starts* (e.g. Apr 2026-Mar 2027 = "2026")
-export function getFinancialYear(date = new Date()) {
-  const d = new Date(date)
-  const month = d.getMonth() // 0 = Jan
-  const year = d.getFullYear()
-  return month >= 3 ? year : year - 1 // April (index 3) onward = current year FY
+// Always resolved in IST, regardless of the browser/server's local timezone,
+// since this is an Indian business's financial year, not a local-clock one.
+export function getFinancialYear(date) {
+  const dateStr = date != null
+    ? (typeof date === 'string' ? date.slice(0, 10) : new Date(date).toISOString().slice(0, 10))
+    : todayIST()
+  const [year, month] = dateStr.split('-').map(Number)
+  return month >= 4 ? year : year - 1 // April (month 4) onward = current year FY
 }
 
 const INVOICE_PREFIX = 'GNS'

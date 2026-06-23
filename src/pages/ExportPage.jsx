@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useToast } from '../components/Toast'
 import { IconExport, IconCSV, IconDownload } from '../components/Icons'
 import { getEntries, getClients, getInvoices } from '../lib/api'
-import { lineTotal } from '../lib/gst'
+import { lineTotal, todayIST } from '../lib/gst'
 
 function toCSV(rows, headers) {
   const escape = v => typeof v === 'string' && (v.includes(',') || v.includes('"') || v.includes('\n'))
@@ -34,7 +34,7 @@ async function exportLedger() {
     Status: e.status,
     'Invoice ID': e.invoice_id || '',
   }))
-  downloadCSV(toCSV(rows, headers), `ledger-${new Date().toISOString().slice(0,10)}.csv`)
+  downloadCSV(toCSV(rows, headers), `ledger-${todayIST()}.csv`)
 }
 
 async function exportClients() {
@@ -47,7 +47,7 @@ async function exportClients() {
     'Tax ID': c.tax_id || '', 'Business Reg': c.business_reg || '',
     Email: c.email || '', Phone: c.phone || '', Address: c.address || '',
   }))
-  downloadCSV(toCSV(rows, headers), `clients-${new Date().toISOString().slice(0,10)}.csv`)
+  downloadCSV(toCSV(rows, headers), `clients-${todayIST()}.csv`)
 }
 
 async function exportInvoices() {
@@ -67,7 +67,7 @@ async function exportInvoices() {
     Template: i.template_type || 'standard',
     Status: i.status,
   }))
-  downloadCSV(toCSV(rows, headers), `invoices-${new Date().toISOString().slice(0,10)}.csv`)
+  downloadCSV(toCSV(rows, headers), `invoices-${todayIST()}.csv`)
 }
 
 export default function ExportPage() {

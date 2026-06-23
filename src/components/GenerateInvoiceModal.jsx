@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import Modal from './Modal'
 import { useToast } from './Toast'
-import { isTamilNaduGSTIN, calculateGST, formatCurrency, formatINR, lineTotal, buildInvoiceFilename, entriesContainRTL } from '../lib/gst'
+import { isTamilNaduGSTIN, calculateGST, formatCurrency, formatINR, lineTotal, buildInvoiceFilename, entriesContainRTL, todayIST } from '../lib/gst'
 import { getNextInvoiceNumber, createInvoice, markEntriesInvoiced, getCompanyProfile } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { generateInvoicePDFHebrew } from '../lib/pdfInvoiceHebrew'
 
 export default function GenerateInvoiceModal({ client, entries, onClose, onGenerated }) {
   const [invoiceNumber, setInvoiceNumber] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
+  const [invoiceDate, setInvoiceDate] = useState(todayIST())
   const [isTN, setIsTN] = useState(true)
   const [templateType, setTemplateType] = useState(client.client_type === 'pdf' ? 'lut' : 'standard')
   const [loading, setLoading] = useState(true)

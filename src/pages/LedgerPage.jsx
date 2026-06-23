@@ -6,10 +6,12 @@ import {
   IconFile, IconGlobe, IconInvoice, IconSearch,
 } from '../components/Icons'
 import { getClients, getEntries, createEntry, updateEntry, deleteEntry, forceDeleteEntry } from '../lib/api'
-import { formatCurrency, formatINR, lineTotal, CURRENCIES } from '../lib/gst'
+import { formatCurrency, formatINR, lineTotal, CURRENCIES, todayIST } from '../lib/gst'
 import GenerateInvoiceModal from '../components/GenerateInvoiceModal'
 
-function today() { return new Date().toISOString().slice(0, 10) }
+// today() now delegates to the IST-aware helper so ledger dates always
+// reflect the business's actual local date, not UTC.
+function today() { return todayIST() }
 
 function emptyEntry(type) {
   return {

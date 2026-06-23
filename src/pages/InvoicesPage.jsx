@@ -5,7 +5,7 @@ import { IconInvoice, IconDownload, IconCheck, IconEdit, IconTrash, IconAlert } 
 import { getInvoices, updateInvoice, recordPayment, getEntries, markEntriesPaid, getCompanyProfile, voidInvoice, getAvailableFinancialYears, getFinancialYear } from '../lib/api'
 import { generateInvoicePDF } from '../lib/pdfInvoice'
 import { generateInvoicePDFHebrew } from '../lib/pdfInvoiceHebrew'
-import { formatCurrency, formatINR, buildInvoiceFilename, entriesContainRTL, formatFinancialYearLabel, formatFinancialYearDateRange, getFinancialYearRange } from '../lib/gst'
+import { formatCurrency, formatINR, buildInvoiceFilename, entriesContainRTL, formatFinancialYearLabel, formatFinancialYearDateRange, getFinancialYearRange, todayIST } from '../lib/gst'
 
 export default function InvoicesPage({ isAdmin }) {
   const [invoices, setInvoices] = useState(null)
@@ -53,7 +53,7 @@ export default function InvoicesPage({ isAdmin }) {
   function openPaymentModal(invoice) {
     setPaymentModal(invoice)
     setPaymentAmount(invoice.amount_received > 0 ? String(invoice.amount_received) : String(invoice.total))
-    setPaymentDate(invoice.last_payment_date || new Date().toISOString().slice(0, 10))
+    setPaymentDate(invoice.last_payment_date || todayIST())
     setInrAmount(invoice.inr_equivalent ? String(invoice.inr_equivalent) : '')
   }
 
