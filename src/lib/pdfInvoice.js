@@ -142,15 +142,35 @@ export async function generateInvoicePDF({ invoice, client, company, entries, te
   let rowIdx = 0
 
   function tableRow(cells) {
-    const h = 24
+    const lineHeight = 13
+    const vPad = 8 // top/bottom padding inside the row
+    const wrapColIdx = 0 // Description / File Name is always the first, variable-length column
+
+    // Pre-wrap only the first (text) column to its own width; other columns
+    // (Pages, Rate/Page, Amount) are always short and never need wrapping.
+    const wrappedLines = cells.map(([txt, w], i) => {
+      if (i !== wrapColIdx) return [String(txt ?? '')]
+      return doc.splitTextToSize(String(txt ?? ''), w - 20) // 20 = left+right padding
+    })
+    const lineCount = Math.max(...wrappedLines.map(lines => lines.length), 1)
+    const h = lineCount * lineHeight + vPad
+
     if (rowIdx % 2 === 1) { doc.setFillColor(...ROWBG); doc.rect(ml, y, contentW, h, 'F') }
     doc.setTextColor(46, 57, 78)
+
     let rx = ml
-    cells.forEach(([txt, w, align]) => {
+    cells.forEach(([, w, align], i) => {
+      const lines = wrappedLines[i]
       const tx = align === 'right' ? rx + w - 10 : rx + 10
-      doc.text(String(txt ?? ''), tx, y + 16, { align })
+      // Single-line columns (Pages/Rate/Amount) vertically center within the
+      // row; the wrapped text column draws top-aligned, one line at a time.
+      const startY = lines.length > 1 ? y + vPad / 2 + lineHeight - 3 : y + h / 2 + 3
+      lines.forEach((line, li) => {
+        doc.text(line, tx, startY + li * lineHeight, { align })
+      })
       rx += w
     })
+
     y += h; rowIdx++
   }
 

@@ -256,15 +256,37 @@ export async function generateInvoicePDFHebrew({ invoice, client, company, entri
   let rowIdx = 0
 
   function tableRow(cells) {
-    const h = 24
+    const lineHeight = 13
+    const vPad = 8
+    const wrapColIdx = 0 // Description / File Name is always the first, variable-length column
+
+    // Same approach as addrBlock(): set the right font for measurement
+    // (Hebrew text needs the Hebrew font's metrics), then split, then draw
+    // each wrapped line through textAuto (which re-resolves script runs
+    // per line, same as every other call in this file).
+    const wrappedLines = cells.map(([txt, w], i) => {
+      const str = String(txt ?? '')
+      if (i !== wrapColIdx) return [str]
+      doc.setFont(hasHebrew(str) ? 'NotoHebrew' : 'helvetica', 'normal')
+      return doc.splitTextToSize(str, w - 20)
+    })
+    const lineCount = Math.max(...wrappedLines.map(lines => lines.length), 1)
+    const h = lineCount * lineHeight + vPad
+
     if (rowIdx % 2 === 1) { doc.setFillColor(...ROWBG); doc.rect(ml, y, contentW, h, 'F') }
     doc.setTextColor(46, 57, 78)
+
     let rx = ml
-    cells.forEach(([txt, w, align]) => {
+    cells.forEach(([, w, align], i) => {
+      const lines = wrappedLines[i]
       const tx = align === 'right' ? rx + w - 10 : rx + 10
-      textAuto(String(txt ?? ''), tx, y + 16, { align })
+      const startY = lines.length > 1 ? y + vPad / 2 + lineHeight - 3 : y + h / 2 + 3
+      lines.forEach((line, li) => {
+        textAuto(line, tx, startY + li * lineHeight, { align })
+      })
       rx += w
     })
+
     y += h; rowIdx++
   }
 

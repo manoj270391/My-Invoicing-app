@@ -103,8 +103,8 @@ export async function getEntries(filters = {}) {
   let q = supabase
     .from('entries')
     .select('*, clients(name, client_type, gstin, currency, is_international)')
-    .order('entry_date', { ascending: false })
-    .order('created_at', { ascending: false })
+    .order('entry_date', { ascending: true })
+    .order('created_at', { ascending: true })
 
   if (filters.clientId)    q = q.eq('client_id', filters.clientId)
   if (filters.entryType)   q = q.eq('entry_type', filters.entryType)
@@ -159,7 +159,7 @@ export async function getInvoices(filters = {}) {
   let q = supabase
     .from('invoices')
     .select('*, clients(name, client_type, gstin, pan, address, email, phone, currency, is_international, vat_number, tax_id)')
-    .order('invoice_date', { ascending: false })
+    .order('invoice_date', { ascending: true })
 
   if (filters.status)   q = q.eq('status', filters.status)
   if (filters.clientId) q = q.eq('client_id', filters.clientId)
