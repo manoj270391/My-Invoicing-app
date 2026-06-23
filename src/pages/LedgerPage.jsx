@@ -15,8 +15,9 @@ function emptyEntry(type) {
   return {
     entry_type: type, client_id: '', entry_date: today(),
     currency: 'INR', project_name: '',
-    file_name: '', pages: '', rate_per_page: '',
-    service_items: [{ description: '', price: '' }],
+    service_items: type === 'pdf'
+      ? [{ file_name: '', pages: '', rate_per_page: '' }]
+      : [{ description: '', price: '' }],
   }
 }
 
@@ -57,7 +58,7 @@ export default function LedgerPage({ isAdmin = true }) {
         if (!(e.file_name?.toLowerCase().includes(s) ||
               e.project_name?.toLowerCase().includes(s) ||
               e.clients?.name?.toLowerCase().includes(s) ||
-              (e.service_items || []).some(i => i.description?.toLowerCase().includes(s)))) return false
+              (e.service_items || []).some(i => i.description?.toLowerCase().includes(s) || i.file_name?.toLowerCase().includes(s)))) return false
       }
       return true
     })
@@ -115,12 +116,21 @@ export default function LedgerPage({ isAdmin = true }) {
       if (d.other_desc) items.push({ description: d.other_desc, price: d.other_price || '' })
       d.service_items = items.length > 0 ? items : [{ description: '', price: '' }]
     }
+    if (d.entry_type === 'pdf' && (!d.service_items || d.service_items.length === 0)) {
+      // migrate legacy single-file entries (flat file_name/pages/rate_per_page) to service_items
+      d.service_items = d.file_name
+        ? [{ file_name: d.file_name, pages: d.pages || '', rate_per_page: d.rate_per_page || '' }]
+        : [{ file_name: '', pages: '', rate_per_page: '' }]
+    }
     setEditing(d)
   }
 
   function addServiceRow() {
     if ((editing.service_items || []).length >= 10) return toast('Maximum 10 line items', 'error')
-    setEditing({ ...editing, service_items: [...(editing.service_items || []), { description: '', price: '' }] })
+    const emptyRow = editing.entry_type === 'pdf'
+      ? { file_name: '', pages: '', rate_per_page: '' }
+      : { description: '', price: '' }
+    setEditing({ ...editing, service_items: [...(editing.service_items || []), emptyRow] })
   }
 
   function removeServiceRow(i) {
@@ -154,11 +164,16 @@ export default function LedgerPage({ isAdmin = true }) {
       })
 
       if (payload.entry_type === 'pdf') {
-        if (!payload.file_name?.trim()) return toast('File name is required', 'error')
-        payload.pages = Number(payload.pages) || 0
-        payload.rate_per_page = Number(payload.rate_per_page) || 0
-        payload.line_total = payload.pages * payload.rate_per_page
-        payload.service_items = []
+        payload.service_items = (payload.service_items || []).filter(i => i.file_name?.trim())
+          .map(i => ({ file_name: i.file_name, pages: Number(i.pages) || 0, rate_per_page: Number(i.rate_per_page) || 0 }))
+        if (payload.service_items.length === 0) return toast('At least one file name is required', 'error')
+        payload.line_total = payload.service_items.reduce((s, i) => s + i.pages * i.rate_per_page, 0)
+        // Keep legacy flat fields null for new multi-file entries -- all data
+        // now lives in service_items. Every entry saved going forward uses
+        // service_items consistently, whether it has 1 file or 10.
+        payload.file_name = null
+        payload.pages = null
+        payload.rate_per_page = null
         // Null out website-specific fields
         payload.website_renewal_desc = null
         payload.website_renewal_price = null
@@ -169,6 +184,7 @@ export default function LedgerPage({ isAdmin = true }) {
       } else {
         payload.service_items = (payload.service_items || []).filter(i => i.description?.trim())
           .map(i => ({ description: i.description, price: Number(i.price) || 0 }))
+        if (payload.service_items.length === 0) return toast('At least one description is required', 'error')
         payload.line_total = payload.service_items.reduce((s, i) => s + i.price, 0)
         // Null out pdf-specific fields
         payload.file_name = null
@@ -405,7 +421,18 @@ export default function LedgerPage({ isAdmin = true }) {
                     <td style={{ padding: '13px 14px', fontWeight: 600, fontSize: 13.5 }}>{e.clients?.name || '—'}</td>
                     <td style={{ padding: '13px 14px', fontSize: 13, color: 'var(--ink-soft)', maxWidth: 280, direction: 'ltr', textAlign: 'left' }}>
                       {e.entry_type === 'pdf' ? (
-                        <span><bdi>{e.file_name}</bdi> <span className="mono" style={{ color: 'var(--slate)', fontSize: 12 }}>· {e.pages}pg × {formatCurrency(e.rate_per_page, e.currency)}</span></span>
+                        e.service_items && e.service_items.length > 0 ? (
+                          e.service_items.length === 1 ? (
+                            <span><bdi>{e.service_items[0].file_name}</bdi> <span className="mono" style={{ color: 'var(--slate)', fontSize: 12 }}>· {e.service_items[0].pages}pg × {formatCurrency(e.service_items[0].rate_per_page, e.currency)}</span></span>
+                          ) : (
+                            <span>
+                              <bdi>{e.service_items.map(i => i.file_name).filter(Boolean).join(', ')}</bdi>{' '}
+                              <span className="mono" style={{ color: 'var(--slate)', fontSize: 12 }}>· {e.service_items.length} files, {e.service_items.reduce((s, i) => s + (Number(i.pages) || 0), 0)}pg total</span>
+                            </span>
+                          )
+                        ) : (
+                          <span><bdi>{e.file_name}</bdi> <span className="mono" style={{ color: 'var(--slate)', fontSize: 12 }}>· {e.pages}pg × {formatCurrency(e.rate_per_page, e.currency)}</span></span>
+                        )
                       ) : (
                         <span><bdi>{(e.service_items?.filter(i => i.description).map(i => i.description).join(', ')) ||
                           ([e.website_renewal_desc, e.google_subscription_desc, e.other_desc].filter(Boolean).join(', ')) ||
@@ -483,23 +510,26 @@ export default function LedgerPage({ isAdmin = true }) {
 
           {editing.entry_type === 'pdf' ? (
             <>
-              <div className="field">
-                <label>File name</label>
-                <input value={editing.file_name} onChange={e => setEditing({ ...editing, file_name: e.target.value })} placeholder="annual-report-2026.pdf" />
-              </div>
-              <div className="field-row">
-                <div className="field">
-                  <label>Pages</label>
-                  <input type="number" min="0" value={editing.pages} onChange={e => setEditing({ ...editing, pages: e.target.value })} placeholder="0" />
+              <div className="section-label">Files received (up to 10)</div>
+              {(editing.service_items || []).map((row, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 32px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                  <input value={row.file_name} onChange={e => updateServiceRow(i, 'file_name', e.target.value)} placeholder={`File ${i + 1} name`}
+                    style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13 }} />
+                  <input type="number" min="0" value={row.pages} onChange={e => updateServiceRow(i, 'pages', e.target.value)} placeholder="Pages"
+                    style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-data)' }} />
+                  <input type="number" min="0" step="0.01" value={row.rate_per_page} onChange={e => updateServiceRow(i, 'rate_per_page', e.target.value)} placeholder="Rate/pg"
+                    style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-data)' }} />
+                  <button onClick={() => removeServiceRow(i)} className="btn btn-ghost btn-sm" disabled={(editing.service_items || []).length <= 1}>
+                    <IconTrash width={13} />
+                  </button>
                 </div>
-                <div className="field">
-                  <label>Rate per page</label>
-                  <input type="number" min="0" step="0.01" value={editing.rate_per_page} onChange={e => setEditing({ ...editing, rate_per_page: e.target.value })} placeholder="0.00" />
-                </div>
-              </div>
-              <div className="field">
-                <label>Line total</label>
-                <input className="mono" disabled value={formatCurrency((Number(editing.pages)||0) * (Number(editing.rate_per_page)||0), editing.currency)} style={{ background: 'var(--paper)', color: 'var(--slate)' }} />
+              ))}
+              {(editing.service_items || []).length < 10 && (
+                <button className="btn btn-ghost btn-sm" onClick={addServiceRow} style={{ marginTop: 4 }}><IconPlus width={13} /> Add file</button>
+              )}
+              <div className="field" style={{ marginTop: 12 }}>
+                <label>Line total <span className="field-hint">({(editing.service_items || []).reduce((s, i) => s + (Number(i.pages) || 0), 0)} pages total)</span></label>
+                <input className="mono" disabled value={formatCurrency((editing.service_items || []).reduce((s, i) => s + (Number(i.pages) || 0) * (Number(i.rate_per_page) || 0), 0), editing.currency)} style={{ background: 'var(--paper)', color: 'var(--slate)' }} />
               </div>
             </>
           ) : (

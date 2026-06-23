@@ -176,12 +176,18 @@ export async function generateInvoicePDF({ invoice, client, company, entries, te
 
   for (const e of entries) {
     if (isPdf) {
-      tableRow([
-        [e.file_name || '',                      cols[0][1], 'left'],
-        [String(e.pages || 0),                   cols[1][1], 'right'],
-        [formatPDF(e.rate_per_page, curr),        cols[2][1], 'right'],
-        [formatPDF(Number(e.line_total)||lineTotal(e), curr), cols[3][1], 'right'],
-      ])
+      const files = (e.service_items?.filter(i => i.file_name?.trim()).length > 0)
+        ? e.service_items.filter(i => i.file_name?.trim())
+        : [{ file_name: e.file_name || '', pages: e.pages || 0, rate_per_page: e.rate_per_page || 0 }]
+
+      for (const f of files) {
+        tableRow([
+          [f.file_name || '',                        cols[0][1], 'left'],
+          [String(f.pages || 0),                     cols[1][1], 'right'],
+          [formatPDF(f.rate_per_page, curr),          cols[2][1], 'right'],
+          [formatPDF((Number(f.pages) || 0) * (Number(f.rate_per_page) || 0), curr), cols[3][1], 'right'],
+        ])
+      }
     } else {
       const items = (e.service_items?.filter(i => i.description?.trim()).length > 0)
         ? e.service_items.filter(i => i.description?.trim())

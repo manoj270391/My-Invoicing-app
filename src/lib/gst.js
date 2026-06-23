@@ -59,6 +59,12 @@ export function formatPDF(amount, currencyCode = 'INR') {
 
 export function lineTotal(entry) {
   if (entry.entry_type === 'pdf') {
+    // New multi-file PDF entries store one row per file in service_items
+    // ({ file_name, pages, rate_per_page }); legacy single-file entries
+    // store pages/rate_per_page directly on the entry.
+    if (entry.service_items && Array.isArray(entry.service_items) && entry.service_items.length > 0) {
+      return entry.service_items.reduce((s, i) => s + (Number(i.pages) || 0) * (Number(i.rate_per_page) || 0), 0)
+    }
     return (Number(entry.pages) || 0) * (Number(entry.rate_per_page) || 0)
   }
   // New JSONB service_items takes priority; fall back to legacy columns
@@ -91,6 +97,7 @@ export function entriesContainRTL(entries, client) {
     if (RTL_RE.test(e.project_name || '')) return true
     for (const item of e.service_items || []) {
       if (RTL_RE.test(item.description || '')) return true
+      if (RTL_RE.test(item.file_name || '')) return true
     }
     if (RTL_RE.test(e.website_renewal_desc || '')) return true
     if (RTL_RE.test(e.google_subscription_desc || '')) return true
