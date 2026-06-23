@@ -158,7 +158,7 @@ export async function markEntriesPaid(entryIds) {
 export async function getInvoices(filters = {}) {
   let q = supabase
     .from('invoices')
-    .select('*, clients(name, client_type, gstin, address, email, phone, currency, is_international, vat_number, tax_id)')
+    .select('*, clients(name, client_type, gstin, pan, address, email, phone, currency, is_international, vat_number, tax_id)')
     .order('invoice_date', { ascending: false })
 
   if (filters.status)   q = q.eq('status', filters.status)

@@ -14,7 +14,7 @@ import { CURRENCIES } from '../lib/gst'
 const EMPTY = {
   name: '', client_type: 'pdf', is_international: false,
   address: '', email: '', phone: '',
-  gstin: '', vat_number: '', tax_id: '', business_reg: '',
+  gstin: '', pan: '', vat_number: '', tax_id: '', business_reg: '',
   currency: 'INR',
 }
 
@@ -194,15 +194,21 @@ export default function ClientsPage({ isAdmin = true }) {
               <input className="mono" value={editing.gstin} onChange={e => setEditing({ ...editing, gstin: e.target.value.toUpperCase() })} placeholder="33ABCDE1234F1Z5" maxLength={15} />
             </div>
             <div className="field">
-              <label>VAT Number</label>
-              <input value={editing.vat_number} onChange={e => setEditing({ ...editing, vat_number: e.target.value })} placeholder="GB123456789" />
+              <label>PAN</label>
+              <input className="mono" value={editing.pan} onChange={e => setEditing({ ...editing, pan: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" maxLength={10} />
             </div>
           </div>
           <div className="field-row">
             <div className="field">
+              <label>VAT Number</label>
+              <input value={editing.vat_number} onChange={e => setEditing({ ...editing, vat_number: e.target.value })} placeholder="GB123456789" />
+            </div>
+            <div className="field">
               <label>Tax ID</label>
               <input value={editing.tax_id} onChange={e => setEditing({ ...editing, tax_id: e.target.value })} placeholder="US EIN / CA BN etc." />
             </div>
+          </div>
+          <div className="field-row">
             <div className="field">
               <label>Business Reg. No.</label>
               <input value={editing.business_reg} onChange={e => setEditing({ ...editing, business_reg: e.target.value })} />

@@ -106,6 +106,7 @@ export async function generateInvoicePDF({ invoice, client, company, entries, te
   const toFields = [
     client.address,
     client.gstin        ? `GSTIN: ${client.gstin}`         : null,
+    client.pan           ? `PAN: ${client.pan}`             : null,
     client.vat_number   ? `VAT: ${client.vat_number}`      : null,
     client.tax_id        ? `Tax ID: ${client.tax_id}`       : null,
     client.business_reg  ? `Reg No: ${client.business_reg}` : null,
