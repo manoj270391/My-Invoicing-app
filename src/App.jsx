@@ -39,8 +39,9 @@ function NavItem({ id, label, icon: Icon, active, onClick, badge }) {
 }
 
 function AppShell({ dueSoon }) {
-  const { session, role, isAdmin } = useAuth()
+  const { session, role, roleError, loading, isAdmin, retryRole } = useAuth()
   const [page, setPage] = useState(null) // null until we know the role, to avoid landing on the wrong default
+  const [stuckTooLong, setStuckTooLong] = useState(false)
 
   useEffect(() => {
     if (role && page === null) {
@@ -48,12 +49,36 @@ function AppShell({ dueSoon }) {
     }
   }, [role, page])
 
+  // If we're still loading/stuck after 8 seconds, offer a manual retry
+  // instead of leaving the spinner running forever with no way out.
+  useEffect(() => {
+    if (!loading && role) { setStuckTooLong(false); return }
+    const timer = setTimeout(() => setStuckTooLong(true), 8000)
+    return () => clearTimeout(timer)
+  }, [loading, role, session])
+
+  if (session === undefined || loading) {
+    return (
+      <div className="center-screen">
+        <div className="loading-spin" />
+      </div>
+    )
+  }
+
   if (!session) return <LoginPage />
 
   if (!role || page === null) {
     return (
-      <div className="center-screen">
+      <div className="center-screen" style={{ flexDirection: 'column', gap: 16 }}>
         <div className="loading-spin" />
+        {(stuckTooLong || roleError) && (
+          <div style={{ textAlign: 'center', maxWidth: 320 }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate)', marginBottom: 12 }}>
+              This is taking longer than expected. Your role couldn't be loaded yet.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={retryRole}>Retry</button>
+          </div>
+        )}
       </div>
     )
   }
