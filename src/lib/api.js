@@ -292,19 +292,28 @@ export async function deleteRecurringTemplate(id) {
 // ── Dashboard analytics ───────────────────────────────────────
 export async function getDashboardStats(fyStartYear) {
   let invQuery = supabase.from('invoices').select('total, status, currency, inr_equivalent, amount_received, last_payment_date, invoice_date, clients(name, client_type)')
-  let entQuery = supabase.from('entries').select('line_total, status, entry_type, currency, entry_date, clients(name, client_type)')
+  // Pending (unbilled) entries belong to "now" until they're actually
+  // invoiced -- they shouldn't be tied to a financial year by their
+  // entry_date, since that's just when the underlying work happened, not
+  // when it was billed. A file from January still sitting unbilled in June
+  // should show up in whichever FY is currently selected, not get hidden
+  // because its entry_date falls in an earlier FY. Only invoiced/paid
+  // entries are tied to a real transaction date and should be filtered by it.
+  let pendingEntQuery = supabase.from('entries').select('line_total, status, entry_type, currency, entry_date, clients(name, client_type)').eq('status', 'pending')
+  let bookedEntQuery  = supabase.from('entries').select('line_total, status, entry_type, currency, entry_date, clients(name, client_type)').neq('status', 'pending')
 
   if (fyStartYear != null) {
     const fyStart = `${fyStartYear}-04-01`
     const fyEnd   = `${fyStartYear + 1}-03-31`
     invQuery = invQuery.gte('invoice_date', fyStart).lte('invoice_date', fyEnd)
-    entQuery = entQuery.gte('entry_date', fyStart).lte('entry_date', fyEnd)
+    bookedEntQuery = bookedEntQuery.gte('entry_date', fyStart).lte('entry_date', fyEnd)
   }
 
-  const [invRes, entRes] = await Promise.all([invQuery, entQuery])
+  const [invRes, pendingRes, bookedRes] = await Promise.all([invQuery, pendingEntQuery, bookedEntQuery])
   if (invRes.error) throw invRes.error
-  if (entRes.error) throw entRes.error
-  return { invoices: invRes.data, entries: entRes.data }
+  if (pendingRes.error) throw pendingRes.error
+  if (bookedRes.error) throw bookedRes.error
+  return { invoices: invRes.data, entries: [...pendingRes.data, ...bookedRes.data] }
 }
 
 // Returns the list of financial-year start-years that have any data at all
