@@ -3,7 +3,7 @@ import Modal from '../components/Modal'
 import { useToast } from '../components/Toast'
 import {
   IconPlus, IconLedger, IconTrash, IconEdit,
-  IconFile, IconGlobe, IconInvoice, IconSearch,
+  IconFile, IconGlobe, IconInvoice, IconSearch, IconAlert,
 } from '../components/Icons'
 import { getClients, getEntries, createEntry, updateEntry, deleteEntry, forceDeleteEntry } from '../lib/api'
 import { formatCurrency, formatINR, lineTotal, CURRENCIES, todayIST } from '../lib/gst'
@@ -18,7 +18,7 @@ function emptyEntry(type) {
     entry_type: type, client_id: '', entry_date: today(),
     currency: 'INR', project_name: '',
     service_items: type === 'pdf'
-      ? [{ file_name: '', pages: '', rate_per_page: '' }]
+      ? [{ file_name: '', pages: '', rate_per_page: '', delivered: true }]
       : [{ description: '', price: '' }],
   }
 }
@@ -31,6 +31,7 @@ export default function LedgerPage({ isAdmin = true }) {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [forceDeleteTarget, setForceDeleteTarget] = useState(null)
+  const [undeliveredWarning, setUndeliveredWarning] = useState(null)
   const [selected, setSelected] = useState(new Set())
   const [lastClickedId, setLastClickedId] = useState(null)
   const [search, setSearch] = useState('')
@@ -121,8 +122,8 @@ export default function LedgerPage({ isAdmin = true }) {
     if (d.entry_type === 'pdf' && (!d.service_items || d.service_items.length === 0)) {
       // migrate legacy single-file entries (flat file_name/pages/rate_per_page) to service_items
       d.service_items = d.file_name
-        ? [{ file_name: d.file_name, pages: d.pages || '', rate_per_page: d.rate_per_page || '' }]
-        : [{ file_name: '', pages: '', rate_per_page: '' }]
+        ? [{ file_name: d.file_name, pages: d.pages || '', rate_per_page: d.rate_per_page || '', delivered: true }]
+        : [{ file_name: '', pages: '', rate_per_page: '', delivered: true }]
     }
     setEditing(d)
   }
@@ -130,7 +131,7 @@ export default function LedgerPage({ isAdmin = true }) {
   function addServiceRow() {
     if ((editing.service_items || []).length >= 10) return toast('Maximum 10 line items', 'error')
     const emptyRow = editing.entry_type === 'pdf'
-      ? { file_name: '', pages: '', rate_per_page: '' }
+      ? { file_name: '', pages: '', rate_per_page: '', delivered: true }
       : { description: '', price: '' }
     setEditing({ ...editing, service_items: [...(editing.service_items || []), emptyRow] })
   }
@@ -167,7 +168,7 @@ export default function LedgerPage({ isAdmin = true }) {
 
       if (payload.entry_type === 'pdf') {
         payload.service_items = (payload.service_items || []).filter(i => i.file_name?.trim())
-          .map(i => ({ file_name: i.file_name, pages: Number(i.pages) || 0, rate_per_page: Number(i.rate_per_page) || 0 }))
+          .map(i => ({ file_name: i.file_name, pages: Number(i.pages) || 0, rate_per_page: Number(i.rate_per_page) || 0, delivered: i.delivered !== false }))
         if (payload.service_items.length === 0) return toast('At least one file name is required', 'error')
         payload.line_total = payload.service_items.reduce((s, i) => s + i.pages * i.rate_per_page, 0)
         // Keep legacy flat fields null for new multi-file entries -- all data
@@ -243,6 +244,22 @@ export default function LedgerPage({ isAdmin = true }) {
 
   function handleGenerate() {
     if (selectedClientIds.size > 1) return toast('Selected entries belong to different clients. Please select entries for a single client only.', 'error')
+
+    // Hard block: refuse to generate an invoice if any selected entry has a
+    // file flagged as not yet delivered to the client. Show exactly which
+    // files in a modal (not a toast, since the list can be long) so it's
+    // clear what needs fixing before invoicing can proceed.
+    const undeliveredFiles = []
+    selectedEntries.forEach(e => {
+      ;(e.service_items || []).forEach(item => {
+        if (item.delivered === false) undeliveredFiles.push(item.file_name || '(unnamed file)')
+      })
+    })
+    if (undeliveredFiles.length > 0) {
+      setUndeliveredWarning(undeliveredFiles)
+      return
+    }
+
     const client = clients.find(c => c.id === [...selectedClientIds][0])
     setInvoiceModal(client)
   }
@@ -440,6 +457,11 @@ export default function LedgerPage({ isAdmin = true }) {
                           ([e.website_renewal_desc, e.google_subscription_desc, e.other_desc].filter(Boolean).join(', ')) ||
                           'Website & domain maintenance'}</bdi></span>
                       )}
+                      {e.entry_type === 'pdf' && (e.service_items || []).some(i => i.delivered === false) && (
+                        <span className="badge" style={{ background: 'var(--red-soft)', color: 'var(--red)', marginLeft: 8 }} title="One or more files in this entry have not been delivered to the client yet">
+                          Not delivered
+                        </span>
+                      )}
                     </td>
                     <td className="mono" style={{ padding: '13px 14px', fontSize: 12.5, color: 'var(--slate)' }}>{e.currency || 'INR'}</td>
                     <td className="mono" style={{ padding: '13px 14px', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(total, e.currency)}</td>
@@ -514,16 +536,27 @@ export default function LedgerPage({ isAdmin = true }) {
             <>
               <div className="section-label">Files received (up to 10)</div>
               {(editing.service_items || []).map((row, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 32px', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                  <input value={row.file_name} onChange={e => updateServiceRow(i, 'file_name', e.target.value)} placeholder={`File ${i + 1} name`}
-                    style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13 }} />
-                  <input type="number" min="0" value={row.pages} onChange={e => updateServiceRow(i, 'pages', e.target.value)} placeholder="Pages"
-                    style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-data)' }} />
-                  <input type="number" min="0" step="0.01" value={row.rate_per_page} onChange={e => updateServiceRow(i, 'rate_per_page', e.target.value)} placeholder="Rate/pg"
-                    style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-data)' }} />
-                  <button onClick={() => removeServiceRow(i)} className="btn btn-ghost btn-sm" disabled={(editing.service_items || []).length <= 1}>
-                    <IconTrash width={13} />
-                  </button>
+                <div key={i} style={{ marginBottom: 10, paddingBottom: 8, borderBottom: i < (editing.service_items.length - 1) ? '1px solid var(--line)' : 'none' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 32px', gap: 8, alignItems: 'center' }}>
+                    <input value={row.file_name} onChange={e => updateServiceRow(i, 'file_name', e.target.value)} placeholder={`File ${i + 1} name`}
+                      style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13 }} />
+                    <input type="number" min="0" value={row.pages} onChange={e => updateServiceRow(i, 'pages', e.target.value)} placeholder="Pages"
+                      style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-data)' }} />
+                    <input type="number" min="0" step="0.01" value={row.rate_per_page} onChange={e => updateServiceRow(i, 'rate_per_page', e.target.value)} placeholder="Rate/pg"
+                      style={{ padding: '8px 11px', border: '1px solid var(--line-strong)', borderRadius: 6, fontSize: 13, fontFamily: 'var(--font-data)' }} />
+                    <button onClick={() => removeServiceRow(i)} className="btn btn-ghost btn-sm" disabled={(editing.service_items || []).length <= 1}>
+                      <IconTrash width={13} />
+                    </button>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, cursor: 'pointer', fontSize: 12, color: row.delivered === false ? 'var(--red)' : 'var(--slate-light)' }}>
+                    <input
+                      type="checkbox"
+                      checked={row.delivered === false}
+                      onChange={e => updateServiceRow(i, 'delivered', !e.target.checked)}
+                      style={{ width: 14, height: 14, accentColor: 'var(--red)' }}
+                    />
+                    Not yet delivered to client
+                  </label>
                 </div>
               ))}
               {(editing.service_items || []).length < 10 && (
@@ -591,6 +624,28 @@ export default function LedgerPage({ isAdmin = true }) {
           <div className="form-actions">
             <button className="btn btn-secondary" onClick={() => setForceDeleteTarget(null)}>Cancel</button>
             <button className="btn btn-danger" onClick={handleForceDelete}>Force delete</button>
+          </div>
+        </Modal>
+      )}
+      {/* Undelivered files block warning */}
+      {undeliveredWarning && (
+        <Modal title="Cannot generate invoice" onClose={() => setUndeliveredWarning(null)} width={440}>
+          <div style={{ background: 'var(--red-soft)', border: '1px solid var(--red)', borderRadius: 8, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <IconAlert width={18} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 13.5, color: 'var(--red)', lineHeight: 1.6 }}>
+              <strong>The following file{undeliveredWarning.length !== 1 ? 's are' : ' is'} marked as not yet delivered to the client:</strong>
+            </div>
+          </div>
+          <ul style={{ fontSize: 13.5, color: 'var(--ink-soft)', lineHeight: 1.8, margin: '0 0 16px', paddingLeft: 20 }}>
+            {undeliveredWarning.map((name, i) => (
+              <li key={i}><bdi>{name}</bdi></li>
+            ))}
+          </ul>
+          <p style={{ fontSize: 13, color: 'var(--slate)', lineHeight: 1.6, margin: '0 0 4px' }}>
+            Open the entry and either remove the "Not yet delivered" flag once the file has been sent, or remove the file from the entry, before invoicing this selection.
+          </p>
+          <div className="form-actions">
+            <button className="btn btn-primary" onClick={() => setUndeliveredWarning(null)}>OK, I'll fix it</button>
           </div>
         </Modal>
       )}
